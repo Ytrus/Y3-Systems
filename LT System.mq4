@@ -34,21 +34,21 @@ extern bool enablePowerLIB = true;
 
 //------------------------Declarations-------------------------------+
 
-bool tradeBuy   = false;
+bool tradeBuy[3];
 
-bool entreeBuy  = false;
+bool entreeBuy[3];
 
-bool sortieBuy  = false;
+bool sortieBuy[3];
 
-bool tradeSell  = false;
+bool tradeSell[3];
 
-bool entreeSell = false;
+bool entreeSell[3];
 
-bool sortieSell = false;
+bool sortieSell[3];
 
-int ticketBuy;
+int ticketBuy[3];
 
-int ticketSell;
+int ticketSell[3];
 
 double p; //order size
 
@@ -183,13 +183,11 @@ int paramD1()
    double fastMA, slowMA;
    int startBarOffset, shift, h;
 
-   entreeBuy  = false;
-
-   sortieBuy  = false;
-
-   entreeSell = false;
-
-   sortieSell = false;
+   ArrayInitialize(entreeBuy,false);
+   ArrayInitialize(sortieBuy,false);
+   ArrayInitialize(entreeSell,false);
+   ArrayInitialize(sortieSell,false);
+      
 
    ArrayInitialize(buyConditions,false);   //Array buyConditions per debuggare
    ArrayInitialize(sellConditions,false);   //Array sellConditions per debuggare
@@ -251,7 +249,10 @@ int paramD1()
 
    )
    {
-         entreeBuy = true; 
+         // attivo tutti gli ordini
+         entreeBuy[0] = true;
+         entreeBuy[1] = true;
+         entreeBuy[2] = true;
          //Print("BUY - b:",b," - a:",a);
    }
 
@@ -264,21 +265,21 @@ int paramD1()
 //-----------------exit buy order---------------------------+
 
    
-   if (OrderSelect(ticketBuy, SELECT_BY_TICKET)==true) 
+   if (OrderSelect(ticketBuy[0], SELECT_BY_TICKET)==true) 
    {
       
       shift = iBarShift(nomIndice,0,OrderOpenTime(),false);
       shift++; // la pin è la barra precedente all'ordine
       double profit;
-      profit = 2*(High[shift]-Low[shift]);
+      profit = (High[shift]-Low[shift]);
       
-      if ( (MarketInfo(nomIndice,MODE_BID) > High[shift]+profit)  // se vedo un profitto pari al  rischio, chiudo
+      if ( (MarketInfo(nomIndice,MODE_BID) > High[shift]+2*profit)  // se vedo un profitto pari al  rischio, chiudo il primo ordine
           || (MarketInfo(nomIndice,MODE_BID)<fastMA)              // se il prezzo scende sotto la media mobile veloce
           //|| (MarketInfo(nomIndice,MODE_BID)<Low[shift]-3*Point)  // se il prezzo scende sotto al minimo della pin
          )
          
       {      
-          sortieBuy = true;
+          sortieBuy[0] = true;
       }
 
       
@@ -311,7 +312,10 @@ int paramD1()
 
    )
    {
-      entreeSell = true; 
+      // attivo tutti gli ordini
+      entreeSell[0] = true; 
+      entreeSell[1] = true; 
+      entreeSell[1] = true; 
       //Print("SELL - b:",b," - a:",a);
    }
    
@@ -323,22 +327,22 @@ int paramD1()
 //-----------------exit sell order ---------------------------+
 
    
-   if (OrderSelect(ticketSell, SELECT_BY_TICKET)==true) // tentativo di protezione del profitto
+   if (OrderSelect(ticketSell[0], SELECT_BY_TICKET)==true) // tentativo di protezione del profitto
    {
    
       shift = iBarShift(nomIndice,0,OrderOpenTime(),false);
       shift++; // la pin è la barra precedente all'ordine
 
-      profit = 2*(High[shift]-Low[shift]);
+      profit = (High[shift]-Low[shift]);
 
       if (
-            (MarketInfo(nomIndice,MODE_BID) < Low[shift]-profit)  // se vedo un profitto pari al rischio, chiudo
+            (MarketInfo(nomIndice,MODE_BID) < Low[shift]-2*profit)  // se vedo un profitto pari al rischio, chiudo
             || (MarketInfo(nomIndice,MODE_BID) > fastMA ) // se il prezzo sale sopra alla media mobile veloce
             //|| (MarketInfo(nomIndice,MODE_BID) > High[shift]+3*Point ) // se il prezzo sale sopra al massimo della pin
          
          )
       {
-       sortieSell = true;
+       sortieSell[0] = true;
       }
 
    }
@@ -366,7 +370,7 @@ int ouvertureBuy()
    double stoploss, takeprofit;
   
 
-   if(tradeBuy == false && tradeSell == false && entreeBuy == true)
+   if(tradeBuy[0] == false && tradeSell[0] == false && entreeBuy[0] == true)
    
 
    {
@@ -381,13 +385,13 @@ int ouvertureBuy()
 
      
 
-      ticketBuy = OrderSend(nomIndice,OP_BUY,setPower(POWER),MarketInfo(nomIndice,MODE_ASK),8,stoploss,takeprofit,"LarryWilliamStrategy_System" ,SIGNATURE,0,MediumBlue);
+      ticketBuy[0] = OrderSend(nomIndice,OP_BUY,setPower(POWER),MarketInfo(nomIndice,MODE_ASK),8,stoploss,takeprofit,"LarryWilliamStrategy_System" ,SIGNATURE,0,MediumBlue);
 
      
 
       //------------------confirmation du passage ordre Buy-----------------+
 
-      if(ticketBuy > 0) tradeBuy = true;
+      if(ticketBuy[0] > 0) tradeBuy[0] = true;
 
    }
 
@@ -407,22 +411,22 @@ int fermetureBuy()
 
    bool t;
 
-   if(tradeBuy == true && sortieBuy == true)
+   if(tradeBuy[0] == true && sortieBuy[0] == true)
 
    {
 
    //------------------close ordre buy------------------------------------+
-   if (OrderSelect(ticketBuy,SELECT_BY_TICKET)==true)
+   if (OrderSelect(ticketBuy[0],SELECT_BY_TICKET)==true)
       double lots = OrderLots();     
 
-   t = OrderClose(ticketBuy,lots,MarketInfo(nomIndice,MODE_BID),5,Brown);
-   Print("fermetureBuy - ticketBuy ",ticketBuy);
+   t = OrderClose(ticketBuy[0],lots,MarketInfo(nomIndice,MODE_BID),5,Brown);
+   Print("fermetureBuy - ticketBuy ",ticketBuy[0]);
    
   
 
    //-------------------confirmation du close buy--------------------------+
 
-   if (t == true) { tradeBuy = false; addOrderToHistory(ticketBuy); ticketBuy = 0; }
+   if (t == true) { tradeBuy[0] = false; addOrderToHistory(ticketBuy[0]); ticketBuy[0] = 0; }
 
    }
 
@@ -444,7 +448,7 @@ int ouvertureSell()
 
   
 
-   if(tradeSell == false && tradeBuy == false && entreeSell == true)
+   if(tradeSell[0] == false && tradeBuy[0] == false && entreeSell[0] == true)
 
    {
    
@@ -460,13 +464,13 @@ int ouvertureSell()
 
      
 
-      ticketSell = OrderSend(nomIndice,OP_SELL,setPower(POWER),MarketInfo(nomIndice,MODE_BID),8,stoploss,takeprofit,"LarryWilliamStrategy_System" ,SIGNATURE,0,MediumBlue);
+      ticketSell[0] = OrderSend(nomIndice,OP_SELL,setPower(POWER),MarketInfo(nomIndice,MODE_BID),8,stoploss,takeprofit,"LarryWilliamStrategy_System" ,SIGNATURE,0,MediumBlue);
 
      
 
       //------------------confirmation du passage ordre Sell-----------------+
 
-      if(ticketSell > 0)tradeSell = true;
+      if(ticketSell[0] > 0)tradeSell[0] = true;
 
    }
 
@@ -486,20 +490,20 @@ int fermetureSell()
 
    bool t;
 
-   if(tradeSell == true && sortieSell == true)
+   if(tradeSell[0] == true && sortieSell[0] == true)
 
    {
 
    //------------------close ordre Sell------------------------------------+
-   if (OrderSelect(ticketSell,SELECT_BY_TICKET)==true)
+   if (OrderSelect(ticketSell[0],SELECT_BY_TICKET)==true)
       double lots = OrderLots();     
 
-   t = OrderClose(ticketSell,lots,MarketInfo(nomIndice,MODE_ASK),5,Brown);
-   Print("fermetureSell - ticketSell ",ticketSell);  
+   t = OrderClose(ticketSell[0],lots,MarketInfo(nomIndice,MODE_ASK),5,Brown);
+   Print("fermetureSell - ticketSell ",ticketSell[0]);  
 
    //-------------------confirmation du close Sell--------------------------+
 
-   if (t == true){ tradeSell = false; addOrderToHistory(ticketSell); ticketSell = 0; }
+   if (t == true){ tradeSell[0] = false; addOrderToHistory(ticketSell[0]); ticketSell[0] = 0; }
 
    }
 
@@ -555,9 +559,9 @@ int commentaire()
 
             "\n +--------------------------------------------------------+\n   ",
 
-            "\n TICKET BUY       : ",ticketBuy,
+            "\n TICKET BUY       : ",ticketBuy[0],
 
-            "\n TICKET SELL      : ",ticketSell,
+            "\n TICKET SELL      : ",ticketSell[0],
             
             "\n TRADES           : ",ArraySize(historicPips),
             
