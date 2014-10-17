@@ -233,9 +233,10 @@ int paramD1()
    if ((startingHour <= h) && (h < endingHour))                buyConditions[0] = true; // siamo negli orari consentiti
    if (isPin("up"))                                            buyConditions[1] = true; // la barra precedente è una pin up
    if (MarketInfo(nomIndice,MODE_BID) > fastMA)                buyConditions[2] = true; // il prezzo è sopra alla media a veloce
-   if (MarketInfo(nomIndice,MODE_BID) > High[1])               buyConditions[3] = true; // il prezzo rompe il massimo della pin...
-   if (MarketInfo(nomIndice,MODE_BID) < High[1]+4*Point)       buyConditions[4] = true; // ...ma non più di 3 punti
-   if (Close[1] > fastMA)                                       buyConditions[5] = true; // il massimo della pin è sopra la media mobile
+   if (MarketInfo(nomIndice,MODE_BID) > High[1]+3*Point)       buyConditions[3] = true; // il prezzo rompe il massimo della pin...
+   if (MarketInfo(nomIndice,MODE_BID) < High[1]+6*Point)       buyConditions[4] = true; // ...ma non più di 3 punti
+   if (Close[1] > fastMA)                                      buyConditions[5] = true; // il massimo della pin è sopra la media mobile
+   if (High[0] < High[1]+10*Point)                             buyConditions[6] = true; // il massimo di oggi non è oltre 10 pips del massimo della pin. Significa che sono già entrato ed uscito!
    // il minimo
    
    
@@ -246,6 +247,7 @@ int paramD1()
       && (buyConditions[3])  
       && (buyConditions[4])  
       && (buyConditions[5])  
+      && (buyConditions[6])  
 
    )
    {
@@ -345,9 +347,10 @@ int paramD1()
    if ((startingHour <= h) && (h < endingHour))                sellConditions[0] = true; // siamo negli orari consentiti
    if (isPin("down"))                                          sellConditions[1] = true; // la barra precedente è una pin down
    if (MarketInfo(nomIndice,MODE_BID) < fastMA)                sellConditions[2] = true; // siamo sotto alla media a veloce
-   if (MarketInfo(nomIndice,MODE_BID) < Low[1])                sellConditions[3] = true; // il prezzo rompe il minimo della pin...
-   if (MarketInfo(nomIndice,MODE_BID) > Low[1]-3*Point)        sellConditions[4] = true; // ... ma non più di 3 punti
-   if (Close[1] < fastMA)                                        sellConditions[5] = true; // il minimo della pin è sotto la media mobile
+   if (MarketInfo(nomIndice,MODE_BID) < Low[1]-3*Point)        sellConditions[3] = true; // il prezzo rompe il minimo della pin...
+   if (MarketInfo(nomIndice,MODE_BID) > Low[1]-6*Point)        sellConditions[4] = true; // ... ma non più di 6 punti
+   if (Close[1] < fastMA)                                      sellConditions[5] = true; // il minimo della pin è sotto la media mobile
+   if (Low[0]>Low[1]-10*Point)                                 sellConditions[6] = true; // il minimo di oggi è oltre 10 pips sotto alla pin. Significa che sono già entrato ed uscito!
 
    if(//   (Volume[0] == 1)
          (sellConditions[0])  
@@ -356,6 +359,7 @@ int paramD1()
       && (sellConditions[3]) 
       && (sellConditions[4]) 
       && (sellConditions[5]) 
+      && (sellConditions[6]) 
 
 
    )
