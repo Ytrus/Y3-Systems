@@ -236,7 +236,7 @@ int paramD1()
    if (MarketInfo(nomIndice,MODE_BID) > High[1]+3*Point)       buyConditions[3] = true; // il prezzo rompe il massimo della pin...
    if (MarketInfo(nomIndice,MODE_BID) < High[1]+6*Point)       buyConditions[4] = true; // ...ma non più di 3 punti
    if (Close[1] > fastMA)                                      buyConditions[5] = true; // il massimo della pin è sopra la media mobile
-   if (High[0] < High[1]+10*Point)                             buyConditions[6] = true; // il massimo di oggi non è oltre 10 pips del massimo della pin. Significa che sono già entrato ed uscito!
+   if (High[0] < High[1]+20*Point)                             buyConditions[6] = true; // il massimo di oggi non è oltre 10 pips del massimo della pin. Significa che sono già entrato ed uscito!
    // il minimo
    
    
@@ -302,9 +302,9 @@ int paramD1()
           sortieBuy[1] = true;
       }
       
-      if (OrderSelect(ticketBuy[0], SELECT_BY_TICKET)==false) //il primo ordine è già stato chiuso a profitto
+      if (ticketBuy[0]==0) //il primo ordine è già stato chiuso a profitto
          {
-            if ( (OrderSelect(ticketBuy[1], SELECT_BY_TICKET)==true) && (MarketInfo(nomIndice,MODE_BID) <= OrderOpenPrice())) //se torno a pareggio, chiudo
+            if (MarketInfo(nomIndice,MODE_BID) <= OrderOpenPrice()) //se torno a pareggio, chiudo
             {sortieBuy[1] = true;}
          }
       
@@ -329,9 +329,9 @@ int paramD1()
           sortieBuy[2] = true;
       }
 
-      if (OrderSelect(ticketBuy[0], SELECT_BY_TICKET)==false) //il primo ordine è già stato chiuso a profitto
+      if (ticketBuy[0]==0) //il primo ordine è già stato chiuso a profitto
          {
-            if ( (OrderSelect(ticketBuy[2], SELECT_BY_TICKET)==true) && (MarketInfo(nomIndice,MODE_BID) <= OrderOpenPrice())) //se torno a pareggio, chiudo
+            if (MarketInfo(nomIndice,MODE_BID) <= OrderOpenPrice()) //se torno a pareggio, chiudo
             {sortieBuy[2] = true;}
          }
       
@@ -350,7 +350,7 @@ int paramD1()
    if (MarketInfo(nomIndice,MODE_BID) < Low[1]-3*Point)        sellConditions[3] = true; // il prezzo rompe il minimo della pin...
    if (MarketInfo(nomIndice,MODE_BID) > Low[1]-6*Point)        sellConditions[4] = true; // ... ma non più di 6 punti
    if (Close[1] < fastMA)                                      sellConditions[5] = true; // il minimo della pin è sotto la media mobile
-   if (Low[0]>Low[1]-10*Point)                                 sellConditions[6] = true; // il minimo di oggi è oltre 10 pips sotto alla pin. Significa che sono già entrato ed uscito!
+   if (Low[0]>Low[1]-20*Point)                                 sellConditions[6] = true; // il minimo di oggi è oltre 10 pips sotto alla pin. Significa che sono già entrato ed uscito!
 
    if(//   (Volume[0] == 1)
          (sellConditions[0])  
@@ -367,7 +367,7 @@ int paramD1()
       // attivo tutti gli ordini
       entreeSell[0] = true; 
       entreeSell[1] = true; 
-      entreeSell[1] = true; 
+      entreeSell[2] = true; 
       //Print("SELL - b:",b," - a:",a);
    }
    
@@ -419,9 +419,9 @@ int paramD1()
        sortieSell[1] = true;
       }
 
-      if (OrderSelect(ticketBuy[0], SELECT_BY_TICKET)==false) //il primo ordine è già stato chiuso a profitto
+      if (ticketSell[0]==0) //il primo ordine è già stato chiuso a profitto
          {
-            if ( (OrderSelect(ticketBuy[1], SELECT_BY_TICKET)==true) && (MarketInfo(nomIndice,MODE_BID) >= OrderOpenPrice())) //se torno a pareggio, chiudo
+            if (MarketInfo(nomIndice,MODE_BID) >= OrderOpenPrice()) //se torno a pareggio, chiudo
             {sortieSell[1] = true;}
          }
 
@@ -429,7 +429,7 @@ int paramD1()
 
 
    //terzo ordine
-   if (OrderSelect(ticketSell[3], SELECT_BY_TICKET)==true) 
+   if (OrderSelect(ticketSell[2], SELECT_BY_TICKET)==true) 
    {
    
       shift = iBarShift(nomIndice,0,OrderOpenTime(),false);
@@ -444,12 +444,12 @@ int paramD1()
          
          )
       {
-       sortieSell[3] = true;
+       sortieSell[2] = true;
       }
 
-      if (OrderSelect(ticketBuy[0], SELECT_BY_TICKET)==false) //il primo ordine è già stato chiuso a profitto
+      if (ticketSell[0]==0) //il primo ordine è già stato chiuso a profitto
          {
-            if ( (OrderSelect(ticketBuy[2], SELECT_BY_TICKET)==true) && (MarketInfo(nomIndice,MODE_BID) >= OrderOpenPrice())) //se torno a pareggio, chiudo
+            if (MarketInfo(nomIndice,MODE_BID) >= OrderOpenPrice()) //se torno a pareggio, chiudo
             {sortieSell[2] = true;}
          }
 
