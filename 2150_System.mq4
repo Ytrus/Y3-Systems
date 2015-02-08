@@ -38,13 +38,13 @@ bool tradeBuy   = false;
 
 bool entreeBuy  = false;
 
-//bool sortieBuy  = false;
+int sortieBuy  = 0;
 
 bool tradeSell  = false;
 
 bool entreeSell = false;
 
-//bool sortieSell = false;
+int sortieSell = 0;
 
 int ticketBuy;
 
@@ -170,6 +170,7 @@ int paramD1()
    if (chk_ordersOnThisBar(ticketBuy) == false)    buyConditions[1] = true; // non ho già inserito un ordine in questa barra
    if (Low[1] < Low[2])                            buyConditions[2] = true; // il minimo di ieri è inferiore a quello di ieri l'altro
    if (Close[0] > High[1])                         buyConditions[3] = true; // il prezzo attuale è superiore al massimo di ieri
+   if (Close[0] < High[1]+High[1]-Low[1])          buyConditions[4] = true; // non siamo troppo in alto
    //&&(High[1] < High[2]) // il massimo di ieri è inferiore al massimo di ieri l'altro
    //&&(High[0] < High[1]+10*Point) // non siamo oltre i 10 pips dal massimo di ieri
    
@@ -178,7 +179,7 @@ int paramD1()
       && (buyConditions[1])  
       && (buyConditions[2])  
       && (buyConditions[3])  
-      //&& (buyConditions[4])  
+      && (buyConditions[4])  
       //&& (buyConditions[5])  
       //&& (buyConditions[6])  
       )
@@ -187,10 +188,52 @@ int paramD1()
          //Print("BUY - b:",b," - a:",a);
    }
 
+//-----------------end---------------------------------------------+
+
+
+
+
+//-----------------exit buy orders---------------------------+
+// dato che posso avere più ordini da gestire, li scorro uno per uno e valuto se vanno chiusi.
+// quando ne trovo uno da chiudere setto la variabile sortieBuy = ticket.
+// TIP: per usare SL e TP fissi, basta fissarli a 100 Points in più di quello che dovrebbero essere e poi chiuderli qui quando li raggiungono con 100 Points di differenza.
+// ES. SL = 1.700, lo imposto a 1.800 nell'ordine (1.700 + 100*Point). Qui verifico se ha raggiunto prezzo SL (1.800 - 100*Point) = 1.700 e nel caso lo chiudo.
+// Idem per il TP
+// la procedura fermetureBuy(ticket) chiuderà l'ordine azzerando poi la variabile sortieBuy = 0
+// se non ce la fa devo ripassare lo stesso ticket a fermetureBuy, finchè ce la fa.
+
+if (sortieBuy == 0)
+   {//scorrere gli ordini per vedere se uno va chiuso
+   for(int pos=0;pos<OrdersTotal();pos++)
+       {
+        if( (OrderSelect(pos,SELECT_BY_POS)==false)
+        || (OrderSymbol() != nomIndice)
+        || (OrderMagicNumber() != SIGNATURE)
+        || (OrderType() != 0)) continue;
+        
+        // Print("Trovato Ordine Buy da controllare : ",OrderTicket());
+        
+        //clausole di chiusura
+        if ((MarketInfo(nomIndice,MODE_ASK) < OrderStopLoss() + (1000*Point))
+          ||(MarketInfo(nomIndice,MODE_ASK) > OrderTakeProfit() - (1000*Point))
+          )
+        {
+         sortieBuy = OrderTicket();       
+         Print("Trovato Ordine Buy da chiudere: ",OrderTicket());
+
+         fermetureBuy(OrderTicket());
+        }
+
+       }
    
+   }
+
 
 //-----------------end---------------------------------------------+
- 
+
+
+
+
 
 //-----------------enter sell order----------------------------+
 
@@ -200,6 +243,7 @@ int paramD1()
    if (chk_ordersOnThisBar(ticketSell) == false)   sellConditions[1] = true; // non ho già inserito un ordine in questa barra
    if (High[1] > High[2])                          sellConditions[2] = true; // il massimo di ieri è superiore al massimo di ieri l'altro
    if (Close[0] < Low[1])                          sellConditions[3] = true; // il prezzo attuale è inferiore al minimo di ieri
+   if (Close[0] > Low[1]-Low[1]+High[1])            sellConditions[4] = true; // Non siamo troppo in basso...
    //&&(Low[1] > Low[2])
    //&&(Low[0] > Low[1]-10*Point)
    
@@ -222,6 +266,13 @@ int paramD1()
 
 //-----------------end---------------------------------------------+
  
+//-----------------exit sell orders---------------------------+
+ 
+
+//-----------------end---------------------------------------------+
+
+
+
 
    return(0);
 
@@ -247,11 +298,11 @@ int ouvertureBuy()
 
       stoploss   = (Low[1] - (SL_added_pips*Point));
 
-      takeprofit = High[1] + ((High[1] - stoploss) * TP_Multiplier);
+      takeprofit = High[1] + ((High[1] - stoploss) * TP_Multiplier) ;
 
-      stoploss   = NormalizeDouble(stoploss,MarketInfo(nomIndice,MODE_DIGITS));
+      stoploss   = NormalizeDouble(stoploss-1000*Point ,MarketInfo(nomIndice,MODE_DIGITS));
 
-      takeprofit = NormalizeDouble(takeprofit,MarketInfo(nomIndice,MODE_DIGITS));
+      takeprofit = NormalizeDouble(takeprofit+1000*Point,MarketInfo(nomIndice,MODE_DIGITS));
 
      
 
@@ -290,7 +341,7 @@ int ouvertureSell()
    
 
       
-      stoploss   = (High[1] + (SL_added_pips*Point));
+      stoploss   = (High[1] + (SL_added_pips*Point)) +100*Point;
 
       takeprofit = Low[1] - ((stoploss - Low[1]) * TP_Multiplier);
       
@@ -312,6 +363,39 @@ int ouvertureSell()
 
    return(0);
 
+}
+
+//-----------------end----------------------------------------+
+
+
+
+//-------------------Buy close-----------------------------------+
+
+int fermetureBuy(int tkt)
+
+{
+   bool t;
+   double lots = 0;
+   
+  
+   if(tkt > 0)
+
+   {
+
+   //------------------close ordre buy------------------------------------+
+   if (OrderSelect(tkt,SELECT_BY_TICKET)==true)
+      lots = OrderLots();     
+
+   t = OrderClose(tkt,lots,MarketInfo(nomIndice,MODE_BID),5,Brown);
+   Print("fermetureBuy - ticketBuy ",tkt);
+
+   //-------------------confirmation du close buy--------------------------+
+
+   if (t == true) {sortieBuy = 0; addOrderToHistory(tkt); ticketBuy = 0; }
+
+   }
+
+   return(0);
 }
 
 //-----------------end----------------------------------------+
