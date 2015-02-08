@@ -55,6 +55,7 @@ double p; //order size
 bool buyConditions[10]; 
 bool sellConditions[10]; 
 
+double atr;
 
 
 
@@ -150,7 +151,7 @@ int paramD1()
 
 { 
 
-   double a, b, m ;   
+   double a, b, plusDI, minusDI;   
 
    entreeBuy  = false;
    
@@ -159,7 +160,10 @@ int paramD1()
    ArrayInitialize(buyConditions,false);   //Array buyConditions per debuggare
    ArrayInitialize(sellConditions,false);   //Array sellConditions per debuggare
 
+   plusDI = iADX(nomIndice,0,14,PRICE_CLOSE,1,1);
+   minusDI = iADX(nomIndice,0,14,PRICE_CLOSE,2,1);
 
+   atr = iATR(nomIndice,0,100,1); //al momento uso un decomo di atr come massimo scostamento dal massimo(minimo) precedenti per sapere se entrare in un trade magari già chiuso poco fa.
 
 //-----------------enter buy order---------------------------+
 
@@ -170,7 +174,8 @@ int paramD1()
    if (chk_ordersOnThisBar(ticketBuy) == false)    buyConditions[1] = true; // non ho già inserito un ordine in questa barra
    if (Low[1] < Low[2])                            buyConditions[2] = true; // il minimo di ieri è inferiore a quello di ieri l'altro
    if (Close[0] > High[1])                         buyConditions[3] = true; // il prezzo attuale è superiore al massimo di ieri
-   if (Close[0] < High[1]+High[1]-Low[1])          buyConditions[4] = true; // non siamo troppo in alto
+   if (Close[0] < High[1] + (atr/10) )             buyConditions[4] = true; // non siamo troppo in alto
+   if (plusDI > minusDI)                           buyConditions[5] = true; // ADX +DI > -DI
    //&&(High[1] < High[2]) // il massimo di ieri è inferiore al massimo di ieri l'altro
    //&&(High[0] < High[1]+10*Point) // non siamo oltre i 10 pips dal massimo di ieri
    
@@ -180,7 +185,7 @@ int paramD1()
       && (buyConditions[2])  
       && (buyConditions[3])  
       && (buyConditions[4])  
-      //&& (buyConditions[5])  
+      && (buyConditions[5])  
       //&& (buyConditions[6])  
       )
    {
@@ -243,7 +248,8 @@ if (sortieBuy == 0)
    if (chk_ordersOnThisBar(ticketSell) == false)   sellConditions[1] = true; // non ho già inserito un ordine in questa barra
    if (High[1] > High[2])                          sellConditions[2] = true; // il massimo di ieri è superiore al massimo di ieri l'altro
    if (Close[0] < Low[1])                          sellConditions[3] = true; // il prezzo attuale è inferiore al minimo di ieri
-   if (Close[0] > Low[1]-Low[1]+High[1])           sellConditions[4] = true; // Non siamo troppo in basso...
+   if (Close[0] > Low[1] - (atr/10))               sellConditions[4] = true; // Non siamo troppo in basso...
+   if (plusDI < minusDI)                           sellConditions[5] = true; // ADX +DI < -DI
    //&&(Low[1] > Low[2])
    //&&(Low[0] > Low[1]-10*Point)
    
@@ -253,8 +259,8 @@ if (sortieBuy == 0)
       && (sellConditions[1]) 
       && (sellConditions[2]) 
       && (sellConditions[3]) 
-      //&& (sellConditions[4]) 
-      //&& (sellConditions[5]) 
+      && (sellConditions[4]) 
+      && (sellConditions[5]) 
       //&& (sellConditions[6]) 
    )
 
@@ -277,7 +283,7 @@ if (sortieSell == 0)
         || (OrderMagicNumber() != SIGNATURE)
         || (OrderType() != 1)) continue;
         
-        // Print("Trovato Ordine Sell da controllare : ",OrderTicket());
+         //Print("Trovato Ordine Sell da controllare : ",OrderTicket());
         
         //clausole di chiusura
         if ((MarketInfo(nomIndice,MODE_ASK) > OrderStopLoss() - (1000*Point))
@@ -441,7 +447,7 @@ int fermetureSell(int tkt)
    if (OrderSelect(tkt,SELECT_BY_TICKET)==true)
       lots = OrderLots();     
 
-   t = OrderClose(tkt,lots,MarketInfo(nomIndice,MODE_BID),5,Brown);
+   t = OrderClose(tkt,lots,MarketInfo(nomIndice,MODE_ASK),5,Brown);
    Print("fermetureBuy - ticketSell ",tkt);
 
    //-------------------confirmation du close buy--------------------------+
@@ -528,8 +534,8 @@ int commentaire()
             "\n POWER            : ",POWER,
             
             "\n +-----------------------------   ",
-            "\n BUY Conditions   : ",buyConditions[0],buyConditions[1],buyConditions[2],buyConditions[3],
-            "\n SELL Conditions  : ",sellConditions[0],sellConditions[1],sellConditions[2],sellConditions[3],
+            "\n BUY Conditions   : ",buyConditions[0],buyConditions[1],buyConditions[2],buyConditions[3],buyConditions[4],buyConditions[5],
+            "\n SELL Conditions  : ",sellConditions[0],sellConditions[1],sellConditions[2],sellConditions[3],sellConditions[4],sellConditions[5],
             "\n +-----------------------------   ",
 
 
