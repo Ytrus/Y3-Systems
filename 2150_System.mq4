@@ -243,7 +243,7 @@ if (sortieBuy == 0)
    if (chk_ordersOnThisBar(ticketSell) == false)   sellConditions[1] = true; // non ho già inserito un ordine in questa barra
    if (High[1] > High[2])                          sellConditions[2] = true; // il massimo di ieri è superiore al massimo di ieri l'altro
    if (Close[0] < Low[1])                          sellConditions[3] = true; // il prezzo attuale è inferiore al minimo di ieri
-   if (Close[0] > Low[1]-Low[1]+High[1])            sellConditions[4] = true; // Non siamo troppo in basso...
+   if (Close[0] > Low[1]-Low[1]+High[1])           sellConditions[4] = true; // Non siamo troppo in basso...
    //&&(Low[1] > Low[2])
    //&&(Low[0] > Low[1]-10*Point)
    
@@ -267,7 +267,32 @@ if (sortieBuy == 0)
 //-----------------end---------------------------------------------+
  
 //-----------------exit sell orders---------------------------+
- 
+
+if (sortieSell == 0)
+   {//scorrere gli ordini per vedere se uno va chiuso
+   for(pos=0;pos<OrdersTotal();pos++)
+       {
+        if( (OrderSelect(pos,SELECT_BY_POS)==false)
+        || (OrderSymbol() != nomIndice)
+        || (OrderMagicNumber() != SIGNATURE)
+        || (OrderType() != 1)) continue;
+        
+        // Print("Trovato Ordine Sell da controllare : ",OrderTicket());
+        
+        //clausole di chiusura
+        if ((MarketInfo(nomIndice,MODE_ASK) > OrderStopLoss() - (1000*Point))
+          ||(MarketInfo(nomIndice,MODE_ASK) < OrderTakeProfit() + (1000*Point))
+          )
+        {
+         sortieSell = OrderTicket();       
+         Print("Trovato Ordine Sell da chiudere: ",OrderTicket());
+
+         fermetureSell(OrderTicket());
+        }
+
+       }
+   
+   } 
 
 //-----------------end---------------------------------------------+
 
@@ -323,52 +348,6 @@ int ouvertureBuy()
 //-----------------end----------------------------------------+
 
  
-
-
-//-----------------------------Sell open-----------------------+
-
-int ouvertureSell()
-
-{
-
-   double stoploss, takeprofit;
-
-  
-   
-   if(entreeSell == true)
-
-   {
-   
-
-      
-      stoploss   = (High[1] + (SL_added_pips*Point)) +100*Point;
-
-      takeprofit = Low[1] - ((stoploss - Low[1]) * TP_Multiplier);
-      
-      stoploss   = NormalizeDouble(stoploss,MarketInfo(nomIndice,MODE_DIGITS));
-
-      takeprofit = NormalizeDouble(takeprofit,MarketInfo(nomIndice,MODE_DIGITS));
-
-     
-
-      ticketSell = OrderSend(nomIndice,OP_SELL,setPower(POWER),MarketInfo(nomIndice,MODE_BID),8,stoploss,takeprofit,COMMENT ,SIGNATURE,0,MediumBlue);
-
-     
-
-      //------------------confirmation du passage ordre Sell-----------------+
-
-      if(ticketSell > 0)tradeSell = true;
-
-   }
-
-   return(0);
-
-}
-
-//-----------------end----------------------------------------+
-
-
-
 //-------------------Buy close-----------------------------------+
 
 int fermetureBuy(int tkt)
@@ -399,6 +378,85 @@ int fermetureBuy(int tkt)
 }
 
 //-----------------end----------------------------------------+
+
+
+
+//-----------------------------Sell open-----------------------+
+
+int ouvertureSell()
+
+{
+
+   double stoploss, takeprofit;
+
+  
+   
+   if(entreeSell == true)
+
+   {
+   
+
+      
+      stoploss   = (High[1] + (SL_added_pips*Point)) +100*Point;
+
+      takeprofit = Low[1] - ((stoploss - Low[1]) * TP_Multiplier);
+      
+      stoploss   = NormalizeDouble(stoploss+1000*Point,MarketInfo(nomIndice,MODE_DIGITS));
+
+      takeprofit = NormalizeDouble(takeprofit-1000*Point,MarketInfo(nomIndice,MODE_DIGITS));
+
+     
+
+      ticketSell = OrderSend(nomIndice,OP_SELL,setPower(POWER),MarketInfo(nomIndice,MODE_BID),8,stoploss,takeprofit,COMMENT ,SIGNATURE,0,MediumBlue);
+
+     
+
+      //------------------confirmation du passage ordre Sell-----------------+
+
+      if(ticketSell > 0)tradeSell = true;
+
+   }
+
+   return(0);
+
+}
+
+//-----------------end----------------------------------------+
+
+
+//-------------------Buy close-----------------------------------+
+
+int fermetureSell(int tkt)
+
+{
+   bool t;
+   double lots = 0;
+   
+  
+   if(tkt > 0)
+
+   {
+
+   //------------------close ordre buy------------------------------------+
+   if (OrderSelect(tkt,SELECT_BY_TICKET)==true)
+      lots = OrderLots();     
+
+   t = OrderClose(tkt,lots,MarketInfo(nomIndice,MODE_BID),5,Brown);
+   Print("fermetureBuy - ticketSell ",tkt);
+
+   //-------------------confirmation du close buy--------------------------+
+
+   if (t == true) {sortieSell = 0; addOrderToHistory(tkt); ticketSell = 0; }
+
+   }
+
+   return(0);
+}
+
+//-----------------end----------------------------------------+
+
+
+
 
 
 //------- VERIFICA ESISTENZA ORDINI IN QUESTA BARRA ----------+
