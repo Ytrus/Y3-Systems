@@ -10,6 +10,9 @@
 // lo SL è sopra(sotto) il massimo(minimo) locale.
 // Il TP è n volte distante lo SL. n è gestito come vaqriabile input
 
+//TODO: Provare a gestire gli ordini barra per barra.
+// testare anche a usare solo una media mobile.
+// gestire dimensione lotti automatica al 2% del capitale.
  
 
 
@@ -22,7 +25,8 @@ string nomIndice = "EURUSD"; //sovrascritto dopo in init()
 extern int SIGNATURE = 0016000;
 extern string COMMENT = "SYSTEM";
 extern double POWER = 0.1;
-extern int TP_Multiplier = 3;
+extern int numberOfOrders = 3; //usato per decidere quanti ordini aprire per ogni posizione. Moltiplica anche la distanza del TP (x1, x2, x3 etc)
+extern double TP_Multiplier = 3; // imposta il rapporto rischio/rendimento. da 1:1 in su
 extern int SL_added_pips = 10; // distanza in pip da aggiungere allo SL. Lo SL è uguale al massimo(minimo) della barra precedente + questo numero di pips. Così è gestibile per ogni strumento.
 extern string nameOfHistoryFile = "XXX_System_HST_";
 extern int Y3_POWER_LIB_maPeriod = 3;
@@ -63,6 +67,12 @@ double atr;
 
 #include  <Y3_POWER_LIB.mqh>
 
+// ------ esperimenti col messagebox -------
+//#import "user32.dll"
+//   int MessageBoxA(int Ignore, string Caption, string Title, int Icon);
+//#import
+//#include <WinUser32.mqh>
+// --------- fine esperimenti ------------------
 //+----------------------- end --------------------+
 
  
@@ -151,7 +161,8 @@ int paramD1()
 
 { 
 
-   double a, b, plusDI, minusDI;   
+   
+   double a, b, plusDI, minusDI, ADx;   
 
    entreeBuy  = false;
    
@@ -160,10 +171,13 @@ int paramD1()
    ArrayInitialize(buyConditions,false);   //Array buyConditions per debuggare
    ArrayInitialize(sellConditions,false);   //Array sellConditions per debuggare
 
+   ADx = iADX(nomIndice,0,21,PRICE_CLOSE,0,1);
    plusDI = iADX(nomIndice,0,14,PRICE_CLOSE,1,1);
    minusDI = iADX(nomIndice,0,14,PRICE_CLOSE,2,1);
 
    atr = iATR(nomIndice,0,100,1); //al momento uso un decomo di atr come massimo scostamento dal massimo(minimo) precedenti per sapere se entrare in un trade magari già chiuso poco fa.
+
+
 
 //-----------------enter buy order---------------------------+
 
@@ -173,9 +187,12 @@ int paramD1()
    if( a > b)                                      buyConditions[0] = true; // trend up
    if (chk_ordersOnThisBar(ticketBuy) == false)    buyConditions[1] = true; // non ho già inserito un ordine in questa barra
    if (Low[1] < Low[2])                            buyConditions[2] = true; // il minimo di ieri è inferiore a quello di ieri l'altro
-   if (Close[0] > High[1])                         buyConditions[3] = true; // il prezzo attuale è superiore al massimo di ieri
-   if (Close[0] < High[1] + (atr/10) )             buyConditions[4] = true; // non siamo troppo in alto
-   if (plusDI > minusDI)                           buyConditions[5] = true; // ADX +DI > -DI
+   if (High[1] <= High[2])                         buyConditions[3] = true; // il massimo di ieri è inferiore a quello di ieri l'altro
+   if (Close[0] > High[1])                         buyConditions[4] = true; // il prezzo attuale è superiore al massimo di ieri
+   if (Close[0] < High[1] + (atr/10) )             buyConditions[5] = true; // non siamo troppo in alto
+   if (plusDI > minusDI)                           buyConditions[6] = true; // ADX +DI > -DI
+   if (High[0]-High[1] < High[1]-Low[1])           buyConditions[7] = true; // Se il massimo di oggi non ha superato il profitto numero 1
+   if (ADx > 20)                                   buyConditions[8] = true; // ADX > 20
    //&&(High[1] < High[2]) // il massimo di ieri è inferiore al massimo di ieri l'altro
    //&&(High[0] < High[1]+10*Point) // non siamo oltre i 10 pips dal massimo di ieri
    
@@ -187,8 +204,11 @@ int paramD1()
       && (buyConditions[4])  
       && (buyConditions[5])  
       //&& (buyConditions[6])  
+      && (buyConditions[7])  
+      //&& (buyConditions[8])  
       )
    {
+         
          entreeBuy = true; 
          //Print("BUY - b:",b," - a:",a);
    }
@@ -221,6 +241,7 @@ if (sortieBuy == 0)
         //clausole di chiusura
         if ((MarketInfo(nomIndice,MODE_ASK) < OrderStopLoss() + (1000*Point))
           ||(MarketInfo(nomIndice,MODE_ASK) > OrderTakeProfit() - (1000*Point))
+          || (isCameBack(OrderTicket()) && (numberOfOrders > 1))
           )
         {
          sortieBuy = OrderTicket();       
@@ -247,9 +268,12 @@ if (sortieBuy == 0)
    if ( a < b)                                     sellConditions[0] = true; // trend down
    if (chk_ordersOnThisBar(ticketSell) == false)   sellConditions[1] = true; // non ho già inserito un ordine in questa barra
    if (High[1] > High[2])                          sellConditions[2] = true; // il massimo di ieri è superiore al massimo di ieri l'altro
-   if (Close[0] < Low[1])                          sellConditions[3] = true; // il prezzo attuale è inferiore al minimo di ieri
-   if (Close[0] > Low[1] - (atr/10))               sellConditions[4] = true; // Non siamo troppo in basso...
-   if (plusDI < minusDI)                           sellConditions[5] = true; // ADX +DI < -DI
+   if (Low[1] >= Low[2])                           sellConditions[3] = true; // il minimo di ieri è superiore al massimo di ieri l'altro
+   if (Close[0] < Low[1])                          sellConditions[4] = true; // il prezzo attuale è inferiore al minimo di ieri
+   if (Close[0] > Low[1] - (atr/10))               sellConditions[5] = true; // Non siamo troppo in basso...
+   if (plusDI < minusDI)                           sellConditions[6] = true; // ADX +DI < -DI
+   if (Low[1]-Low[0] < High[1]-Low[1])             sellConditions[7] = true; // Se il minimo di oggi non ha superato il profitto numero 1
+   if (ADx > 20)                                   sellConditions[8] = true; // ADX > 20
    //&&(Low[1] > Low[2])
    //&&(Low[0] > Low[1]-10*Point)
    
@@ -262,9 +286,12 @@ if (sortieBuy == 0)
       && (sellConditions[4]) 
       && (sellConditions[5]) 
       //&& (sellConditions[6]) 
+      && (sellConditions[7]) 
+      //&& (sellConditions[8]) 
    )
 
    {
+
       entreeSell = true; 
       //Print("SELL - b:",b," - a:",a);
    }
@@ -288,6 +315,7 @@ if (sortieSell == 0)
         //clausole di chiusura
         if ((MarketInfo(nomIndice,MODE_ASK) > OrderStopLoss() - (1000*Point))
           ||(MarketInfo(nomIndice,MODE_ASK) < OrderTakeProfit() + (1000*Point))
+          ||(isCameBack(OrderTicket()) && (numberOfOrders > 1))
           )
         {
          sortieSell = OrderTicket();       
@@ -322,28 +350,33 @@ int ouvertureBuy()
    double stoploss, takeprofit;
   
 
-   if(entreeBuy == true)
    
-
+   // per aprire più ordini uso la variabile numberOfOrders
+   for (int orx=1;orx<=numberOfOrders;orx++)
    {
+      if(entreeBuy == true)
 
-      stoploss   = (Low[1] - (SL_added_pips*Point));
-
-      takeprofit = High[1] + ((High[1] - stoploss) * TP_Multiplier) ;
-
-      stoploss   = NormalizeDouble(stoploss-1000*Point ,MarketInfo(nomIndice,MODE_DIGITS));
-
-      takeprofit = NormalizeDouble(takeprofit+1000*Point,MarketInfo(nomIndice,MODE_DIGITS));
-
-     
-
-      ticketBuy = OrderSend(nomIndice,OP_BUY,setPower(POWER),MarketInfo(nomIndice,MODE_ASK),8,stoploss,takeprofit,COMMENT ,SIGNATURE,0,MediumBlue);
-
-     
-
-      //------------------confirmation du passage ordre Buy-----------------+
-
-      if(ticketBuy > 0) tradeBuy = true;
+      {   stoploss   = (Low[1] - (SL_added_pips*Point));
+   
+         takeprofit = High[1] + ((High[1] - stoploss) * orx * TP_Multiplier) ;
+   
+         stoploss   = NormalizeDouble(stoploss-1000*Point ,MarketInfo(nomIndice,MODE_DIGITS));
+   
+         takeprofit = NormalizeDouble(takeprofit+1000*Point,MarketInfo(nomIndice,MODE_DIGITS));
+   
+        
+   
+         ticketBuy = OrderSend(nomIndice,OP_BUY,setPower(POWER),MarketInfo(nomIndice,MODE_ASK),8,stoploss,takeprofit,COMMENT ,SIGNATURE,0,MediumBlue);
+   
+        
+   
+         //------------------confirmation du passage ordre Buy-----------------+
+   
+         if(ticketBuy > 0) 
+            {if (orx == numberOfOrders) tradeBuy = true;}
+         else
+            {orx--;}
+      }
 
    }
 
@@ -396,33 +429,36 @@ int ouvertureSell()
    double stoploss, takeprofit;
 
   
-   
-   if(entreeSell == true)
-
+   // per aprire più ordini uso la variabile numberOfOrders
+   for (int orx=1;orx<=numberOfOrders;orx++)
    {
+      if(entreeSell == true)
    
-
-      
-      stoploss   = (High[1] + (SL_added_pips*Point)) +100*Point;
-
-      takeprofit = Low[1] - ((stoploss - Low[1]) * TP_Multiplier);
-      
-      stoploss   = NormalizeDouble(stoploss+1000*Point,MarketInfo(nomIndice,MODE_DIGITS));
-
-      takeprofit = NormalizeDouble(takeprofit-1000*Point,MarketInfo(nomIndice,MODE_DIGITS));
-
-     
-
-      ticketSell = OrderSend(nomIndice,OP_SELL,setPower(POWER),MarketInfo(nomIndice,MODE_BID),8,stoploss,takeprofit,COMMENT ,SIGNATURE,0,MediumBlue);
-
-     
-
-      //------------------confirmation du passage ordre Sell-----------------+
-
-      if(ticketSell > 0)tradeSell = true;
-
+      {
+         
+         stoploss   = (High[1] + (SL_added_pips*Point));
+   
+         takeprofit = Low[1] - ((stoploss - Low[1]) * orx * TP_Multiplier);
+         
+         stoploss   = NormalizeDouble(stoploss+1000*Point,MarketInfo(nomIndice,MODE_DIGITS));
+   
+         takeprofit = NormalizeDouble(takeprofit-1000*Point,MarketInfo(nomIndice,MODE_DIGITS));
+   
+        
+   
+         ticketSell = OrderSend(nomIndice,OP_SELL,setPower(POWER),MarketInfo(nomIndice,MODE_BID),8,stoploss,takeprofit,COMMENT ,SIGNATURE,0,Purple);
+   
+        
+   
+         //------------------confirmation du passage ordre Sell-----------------+
+   
+         if(ticketSell > 0)
+            {if (orx == numberOfOrders) tradeSell = true;}
+         else
+            {orx--;}
+      }
    }
-
+   
    return(0);
 
 }
@@ -501,6 +537,46 @@ bool chk_ordersOnThisBar(int tik)
 //-----------------end----------------------------------------+ 
 
 
+//--- Verifica se un ordine torna indietro dopo aver fisto un certo profitto ----------------------------+ 
+
+bool isCameBack(int tkt)
+{
+
+   int shift;
+   double profit, max_, min_;
+   bool result = false;
+   
+   if (OrderSelect(tkt, SELECT_BY_TICKET)==true) 
+   {
+      //se questo ordine ha visto sulla carta un profitto pari al rischio (profit), quando torna indietro lo chiudo a brake even
+      
+      shift = iBarShift(nomIndice,0,OrderOpenTime(),false);
+      shift++; // il segnale è la barra precedente all'ordine
+      profit = MathAbs(High[shift]-Low[shift]);
+      
+     
+      if (OrderType() == OP_BUY) // buy order
+      {
+         max_ = High[iHighest(nomIndice,0,MODE_HIGH,shift,0)];
+         if ( (max_ - OrderOpenPrice() >= profit) && (MarketInfo(nomIndice,MODE_BID) <= OrderOpenPrice()))
+         {result = true; Print("Order Buy ", tkt, " is Coming Back: CHIUDO");}
+      }
+
+ 
+      if (OrderType() == OP_SELL) // sell order
+      {
+         min_ = Low[iLowest(nomIndice,0,MODE_LOW,shift,0)];
+         if ((OrderOpenPrice() - min_ >= profit) && (MarketInfo(nomIndice,MODE_BID) >= OrderOpenPrice()))
+         {result = true; Print("Order Sell ", tkt, " is Coming Back: CHIUDO");}
+      }
+       
+      return result;
+   }
+
+}
+//-----------------end----------------------------------------+ 
+
+
 //-------------------prints------------------------------+
 
 int commentaire()
@@ -534,8 +610,8 @@ int commentaire()
             "\n POWER            : ",POWER,
             
             "\n +-----------------------------   ",
-            "\n BUY Conditions   : ",buyConditions[0],buyConditions[1],buyConditions[2],buyConditions[3],buyConditions[4],buyConditions[5],
-            "\n SELL Conditions  : ",sellConditions[0],sellConditions[1],sellConditions[2],sellConditions[3],sellConditions[4],sellConditions[5],
+            "\n BUY Conditions   : ",buyConditions[0],buyConditions[1],buyConditions[2],buyConditions[3],buyConditions[4],buyConditions[5],buyConditions[6],
+            "\n SELL Conditions  : ",sellConditions[0],sellConditions[1],sellConditions[2],sellConditions[3],sellConditions[4],sellConditions[5],sellConditions[6],
             "\n +-----------------------------   ",
 
 
