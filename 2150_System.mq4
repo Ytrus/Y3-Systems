@@ -11,7 +11,7 @@
 // Il TP è n volte distante lo SL. n è gestito come vaqriabile input
 
 //TODO: Provare a gestire gli ordini barra per barra.
-// testare anche a usare solo una media mobile.
+// Con una sola media mobile veloce: aprire su ogni rottura ribassista (non parlo di tiracciamenti: si compra su OGNI rottura!) se sotto di essa e su ogni rottura rialzista, se sopra ad essa. Chiudere al minimo(massimo) della barra precedente OPPURE quando si tocca la media.
 // gestire dimensione lotti automatica al 2% del capitale.
  
 
@@ -193,12 +193,14 @@ int paramD1()
    if (plusDI > minusDI)                           buyConditions[6] = true; // ADX +DI > -DI
    if (High[0]-High[1] < High[1]-Low[1])           buyConditions[7] = true; // Se il massimo di oggi non ha superato il profitto numero 1
    if (ADx > 20)                                   buyConditions[8] = true; // ADX > 20
+   //if (Close[0] > b)                             buyConditions[9] = true; // Il prezzo è sopra alla media lenta
+   if (Close[0] > a)                               buyConditions[9] = true; // Il prezzo è sopra alla media veloce
    //&&(High[1] < High[2]) // il massimo di ieri è inferiore al massimo di ieri l'altro
    //&&(High[0] < High[1]+10*Point) // non siamo oltre i 10 pips dal massimo di ieri
    
    if(
-         (buyConditions[0]) 
-      && (buyConditions[1])  
+      // (buyConditions[0]) 
+         (buyConditions[1])  
       && (buyConditions[2])  
       && (buyConditions[3])  
       && (buyConditions[4])  
@@ -206,6 +208,7 @@ int paramD1()
       //&& (buyConditions[6])  
       && (buyConditions[7])  
       //&& (buyConditions[8])  
+      && (buyConditions[9])  
       )
    {
          
@@ -274,13 +277,13 @@ if (sortieBuy == 0)
    if (plusDI < minusDI)                           sellConditions[6] = true; // ADX +DI < -DI
    if (Low[1]-Low[0] < High[1]-Low[1])             sellConditions[7] = true; // Se il minimo di oggi non ha superato il profitto numero 1
    if (ADx > 20)                                   sellConditions[8] = true; // ADX > 20
-   //&&(Low[1] > Low[2])
-   //&&(Low[0] > Low[1]-10*Point)
+   //if (Close[0] < b)                             sellConditions[9] = true; // Il prezzo è sotto alla media lenta
+   if (Close[0] < a)                               sellConditions[9] = true; // Il prezzo è sotto alla media veloce
    
    
    if(
-         (sellConditions[0])  
-      && (sellConditions[1]) 
+      // (sellConditions[0])  
+         (sellConditions[1]) 
       && (sellConditions[2]) 
       && (sellConditions[3]) 
       && (sellConditions[4]) 
@@ -288,6 +291,7 @@ if (sortieBuy == 0)
       //&& (sellConditions[6]) 
       && (sellConditions[7]) 
       //&& (sellConditions[8]) 
+      && (sellConditions[9]) 
    )
 
    {
