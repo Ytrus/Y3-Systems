@@ -352,8 +352,8 @@ if (sortieBuy == 0)
         
         //clausole di chiusura
         if ((isCameBack(OrderTicket()))                                          // Se ha raggiunto il primo TP e torna indietro
-          ||(MarketInfo(nomIndice,MODE_ASK) < OrderStopLoss() + (1000*Point))     // Raggiunto SL
-          ||(MarketInfo(nomIndice,MODE_ASK) > OrderTakeProfit() - (1000*Point))   // Raggiunto TP
+          ||(MarketInfo(nomIndice,MODE_BID) <= OrderStopLoss() + (1000*Point))     // Raggiunto SL
+          ||(MarketInfo(nomIndice,MODE_BID) >= OrderTakeProfit() - (1000*Point))   // Raggiunto TP
            )
         {
          sortieBuy = OrderTicket();       
@@ -423,8 +423,8 @@ if (sortieSell == 0)
         
         //clausole di chiusura
         if ( (isCameBack(OrderTicket()))                                          // Se ha raggiunto il primo TP e torna indietro
-          ||(MarketInfo(nomIndice,MODE_ASK) > OrderStopLoss() - (1000*Point))     // Raggiunto SL
-          ||(MarketInfo(nomIndice,MODE_ASK) < OrderTakeProfit() + (1000*Point))   // Raggiunto TP
+          ||(MarketInfo(nomIndice,MODE_ASK) >= OrderStopLoss() - (1000*Point))     // Raggiunto SL
+          ||(MarketInfo(nomIndice,MODE_ASK) <= OrderTakeProfit() + (1000*Point))   // Raggiunto TP
           )
         {
          sortieSell = OrderTicket();       
