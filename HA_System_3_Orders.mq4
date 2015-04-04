@@ -300,7 +300,7 @@ int paramD1()
    if (MarketInfo(nomIndice,MODE_BID) >= min)                  buyConditions[5] = true; // se il prezzo sta scendendo non devo rientrare (mi ha già buttato fuori quando ho toccato min)
    if (MarketInfo(nomIndice,MODE_BID) >= haLow[1])             buyConditions[6] = true; // idem per il minimo della barra precedente
    if (MarketInfo(nomIndice,MODE_BID) <= Low[1])               buyConditions[7] = true; // Se scende sotto al minimo della barra precedente non entro più
-   //if (iMA(nomIndice,0,MA_fast,0,MODE_EMA,PRICE_MEDIAN,1) < iMA(nomIndice,0,MA_slow,0,MODE_EMA,PRICE_MEDIAN,1))  buyConditions[8] = true; //solo se la media a 6 è sopra la media a 21 (trend up)
+   if (Low[0] > min)                                           buyConditions[8] = true; // solo se la barra attuale non è anche il minimo di giornata 
    if (MarketInfo(nomIndice,MODE_SPREAD) < 2*Point)            buyConditions[9] = true; //entro solo quando lo spread è inferiore a 2
    if (existOrder(0) < 0)                                      buyConditions[10] = true; // non ho già un ordine aperto in questa direzione
    
@@ -314,7 +314,7 @@ int paramD1()
       && (buyConditions[5]) 
       //&& (buyConditions[6]) 
       //&& (buyConditions[7]) 
-      //&& (buyConditions[8]) 
+      && (buyConditions[8]) 
       //&& (buyConditions[9]) 
       && (buyConditions[10]) 
       //&& (MathAbs(haOpen[1]-haClose[1]) > MathAbs(haHigh[1]-haLow[1])/2 ) //il corpo deve essere maggiore alla metà dell'ombra
@@ -381,11 +381,11 @@ if (sortieBuy == 0)
    if ((haClose[2] > haOpen[2]) && (haClose[3] > haOpen[3]))   sellConditions[3] = true; //le due barre precedenti a quella sono entrambe BULL
    if (nearestMax > max-tollerance)                            sellConditions[4] = true; //il massimo delle ultime 5 barre era vicino al massimo assoluto della giornata
    if (MarketInfo(nomIndice,MODE_BID) <= max)                  sellConditions[5] = true; // se il prezzo sta salendo non devo rientrare (mi ha già buttato fuori quando ho toccato max)
-   if (MarketInfo(nomIndice,MODE_BID) <= haHigh[1])          sellConditions[6] = true; // idem per il massimo della barra precedente
+   if (MarketInfo(nomIndice,MODE_BID) <= haHigh[1])            sellConditions[6] = true; // idem per il massimo della barra precedente
    if (MarketInfo(nomIndice,MODE_BID) >= High[1])              sellConditions[7] = true; // Se sale oltre il max della barra precedente non entro più
-   //if ( iMA(nomIndice,0,MA_fast,0,MODE_EMA,PRICE_MEDIAN,1) > iMA(nomIndice,0,MA_slow,0,MODE_EMA,PRICE_MEDIAN,1))  sellConditions[8] = true; //solo se la media a 6 è sotto la media a 21 (trend up)
-   if (MarketInfo(nomIndice,MODE_SPREAD) < 2*Point)            sellConditions[9] = true; //entro solo quando lo spread è inferiore a 2 punti
-   if (existOrder(1) < 0 )                                 sellConditions[10] = true; // non ho già un ordine attivo in questa direzione
+   if (High[0] < max)                                          sellConditions[8] = true; // solo se la barra attuale non è anche il massimo di giornata 
+   if (MarketInfo(nomIndice,MODE_SPREAD) < 2*Point)            sellConditions[9] = true; // entro solo quando lo spread è inferiore a 2 punti
+   if (existOrder(1) < 0 )                                     sellConditions[10] = true;// non ho già un ordine attivo in questa direzione
 
    if(    //(Volume[0] == 1) &&
       (sellConditions[0])  
@@ -396,7 +396,7 @@ if (sortieBuy == 0)
       && (sellConditions[5]) 
       //&& (sellConditions[6]) 
       //&& (sellConditions[7]) 
-      //&& (sellConditions[8]) 
+      && (sellConditions[8]) 
       //&& (sellConditions[9]) 
       && (sellConditions[10]) 
       //&& (MathAbs(haOpen[1]-haClose[1]) > MathAbs(haHigh[1]-haLow[1])/2 ) //il corpo deve essere maggiore alla metà dell'ombra
