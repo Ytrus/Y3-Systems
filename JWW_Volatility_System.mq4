@@ -4,15 +4,10 @@
 //| DEFAULT: DA TESTARE                                              |
 //+------------------------------------------------------------------+
 
-// Apre una posizione quando si rompe un minimo(massimo) locale tornando in direzione di trend. Per vedere il trend si usano due medie mobili: 21 e 100.
-// Non gestisce la posizione una volta aperta.
-// permette di aprire posizioni su posizioni: ognuna ha il suo TP e SL, che agiscono da soli.
-// lo SL è sopra(sotto) il massimo(minimo) locale.
-// Il TP è n volte distante lo SL. n è gestito come vaqriabile input
-
-//TODO: Provare a gestire gli ordini barra per barra.
-// il segnale è poco affidabile. Nei periodi di lateralità porta solo perdite. Funziona solo nei periodi di trend importante. Quindi TENTARE DI DETTAGLIARE MEGLIO IL SEGNALE
-// gestire dimensione lotti automatica al 2% del capitale.
+// Basato sul Volatility System di J. Welles Wilder Jr. - pag 23 di NEW CONCEPTS IN TECHNICAL TRADING SYSTEMS
+// è un true reverse: quando chiude un buy, apre un sell e viceversa
+// il manuale dice di usarlo su grafici D1
+// dovrebbe agire solo all'apertura di una nuova barra
  
 
 
@@ -22,13 +17,13 @@ string nomIndice = "EURUSD"; //sovrascritto dopo in init()
  
 
 //--------number of lots to trade--------------+
-extern int SIGNATURE = 0016000;
+extern int SIGNATURE = 0017000;
 extern string COMMENT = "SYSTEM";
 extern double POWER = 0.1;
-extern int fast_MA = 21;
-extern int slow_MA = 100;
-extern int numberOfOrders = 3; //usato per decidere quanti ordini aprire per ogni posizione. Moltiplica anche la distanza del TP (x1, x2, x3 etc)
+extern int period = 7;
+extern int C = 3;
 extern double TP_Multiplier = 3; // imposta il rapporto rischio/rendimento. da 1:1 in su
+extern int numberOfOrders = 1; //usato per decidere quanti ordini aprire per ogni posizione. Moltiplica anche la distanza del TP (x1, x2, x3 etc)
 extern int SL_added_pips = 10; // distanza in pip da aggiungere allo SL. Lo SL è uguale al massimo(minimo) della barra precedente + questo numero di pips. Così è gestibile per ogni strumento.
 extern string nameOfHistoryFile = "XXX_System_HST_";
 extern int Y3_POWER_LIB_maPeriod = 3;
@@ -61,7 +56,8 @@ double p; //order size
 bool buyConditions[10]; 
 bool sellConditions[10]; 
 
-double atr;
+double atr, ARC, maxSAR, minSAR;   
+
 
 
 
@@ -92,8 +88,11 @@ int init()
    //metto il simbolo attuale nella variabile, per poter utilizzare il programma su ogni simbolo
    nomIndice = Symbol();
    
-   
+   // inizializzo la powerLib
    initY3_POWER_LIB(nameOfHistoryFile,SIGNATURE,Y3_POWER_LIB_maPeriod,enablePowerLIB);
+   
+   // inizializzo atr
+   atr = iATR(nomIndice,0,period,1);
    
 
 //----
@@ -134,7 +133,8 @@ int start()
   {
 
 //----
-
+if (Volume[0] < 10)
+{
    paramD1();
 
    ouvertureBuy();
@@ -146,9 +146,8 @@ int start()
 //   fermetureSell();
 
    commentaire();
-
 //----
-
+}
    return(0);
 
   }
@@ -164,52 +163,33 @@ int paramD1()
 { 
 
    
-   double a, b, plusDI, minusDI, ADx;   
 
    entreeBuy  = false;
    
    entreeSell = false;
      
    ArrayInitialize(buyConditions,false);   //Array buyConditions per debuggare
-   ArrayInitialize(sellConditions,false);   //Array sellConditions per debuggare
+   ArrayInitialize(sellConditions,false);  //Array sellConditions per debuggare
 
-   ADx = iADX(nomIndice,0,21,PRICE_CLOSE,0,1);
-   plusDI = iADX(nomIndice,0,14,PRICE_CLOSE,1,1);
-   minusDI = iADX(nomIndice,0,14,PRICE_CLOSE,2,1);
 
-   atr = iATR(nomIndice,0,100,1); //al momento uso un decomo di atr come massimo scostamento dal massimo(minimo) precedenti per sapere se entrare in un trade magari già chiuso poco fa.
+      atr = iATR(nomIndice,0,period,1); //atr = getATR(period);
+      ARC = C * atr;
+      maxSAR = getSIC(period,"min") + ARC;
+      minSAR = getSIC(period,"max") - ARC;
+      drawSAR(maxSAR, minSAR);
 
 
 
 //-----------------enter buy order---------------------------+
 
-   a = iMA(nomIndice,0,fast_MA,0,MODE_EMA,PRICE_MEDIAN,0);
-   b = iMA(nomIndice,0,slow_MA,0,MODE_EMA,PRICE_MEDIAN,0);
    
-   if( a > b)                                      buyConditions[0] = true; // trend up
-   if (chk_ordersOnThisBar(ticketBuy) == false)    buyConditions[1] = true; // non ho già inserito un ordine in questa barra
-   if (Low[1] < Low[2])                            buyConditions[2] = true; // il minimo di ieri è inferiore a quello di ieri l'altro
-   if (High[1] <= High[2])                         buyConditions[3] = true; // il massimo di ieri è inferiore a quello di ieri l'altro
-   if (Close[0] > High[1])                         buyConditions[4] = true; // il prezzo attuale è superiore al massimo di ieri
-   if (Close[0] < High[1] + (atr/10) )             buyConditions[5] = true; // non siamo troppo in alto
-   if (plusDI > minusDI)                           buyConditions[6] = true; // ADX +DI > -DI
-   if (High[0]-High[1] < High[1]-Low[1])           buyConditions[7] = true; // Se il massimo di oggi non ha superato il profitto numero 1
-   if (ADx > 20)                                   buyConditions[8] = true; // ADX > 20
-   if (Close[0] > b)                             buyConditions[9] = true; // Il prezzo è sopra alla media lenta
-   //if (Close[0] > a)                               buyConditions[9] = true; // Il prezzo è sopra alla media veloce
-   
+   if( Close[1] > maxSAR)                     buyConditions[0] = true; // se passiamo oltre al maxSAR entriamo in long
+   if( existOrder(0) < 0)                     buyConditions[1] = true; // non ho un altro ordine buy attivo
+
    
    if(
        (buyConditions[0]) 
       && (buyConditions[1])  
-      && (buyConditions[2])  
-      && (buyConditions[3])  
-      && (buyConditions[4])  
-      && (buyConditions[5])  
-      //&& (buyConditions[6])  
-      && (buyConditions[7])  
-      //&& (buyConditions[8])  
-      && (buyConditions[9])  
       )
    {
          
@@ -243,11 +223,10 @@ if (sortieBuy == 0)
         // Print("Trovato Ordine Buy da controllare : ",OrderTicket());
         
         //clausole di chiusura
-        if ((MarketInfo(nomIndice,MODE_ASK) < OrderStopLoss() + (1000*Point))   // Raggiunto SL
-          ||(MarketInfo(nomIndice,MODE_ASK) > OrderTakeProfit() - (1000*Point)) // Raggiunto TP
-          || (isCameBack(OrderTicket()) && (numberOfOrders > 1))                // Prezzo tornato indietro dopo aver visto un profitto pari al rischio
-          || (MarketInfo(nomIndice,MODE_BID) < a)                               // Il prezzo scende sotto alla media veloce
-          )
+        if ((Close[1] < minSAR)                                                  // Il prezzo scende sotto al minSAR
+//          ||(MarketInfo(nomIndice,MODE_ASK) < OrderStopLoss() + (1000*Point))    // Raggiunto SL
+//          ||(MarketInfo(nomIndice,MODE_ASK) > OrderTakeProfit() - (1000*Point))  // Raggiunto TP
+           )
         {
          sortieBuy = OrderTicket();       
          Print("Trovato Ordine Buy da chiudere: ",OrderTicket());
@@ -270,31 +249,14 @@ if (sortieBuy == 0)
 
 
 
-   if ( a < b)                                     sellConditions[0] = true; // trend down
-   if (chk_ordersOnThisBar(ticketSell) == false)   sellConditions[1] = true; // non ho già inserito un ordine in questa barra
-   if (High[1] > High[2])                          sellConditions[2] = true; // il massimo di ieri è superiore al massimo di ieri l'altro
-   if (Low[1] >= Low[2])                           sellConditions[3] = true; // il minimo di ieri è superiore al massimo di ieri l'altro
-   if (Close[0] < Low[1])                          sellConditions[4] = true; // il prezzo attuale è inferiore al minimo di ieri
-   if (Close[0] > Low[1] - (atr/10))               sellConditions[5] = true; // Non siamo troppo in basso...
-   if (plusDI < minusDI)                           sellConditions[6] = true; // ADX +DI < -DI
-   if (Low[1]-Low[0] < High[1]-Low[1])             sellConditions[7] = true; // Se il minimo di oggi non ha superato il profitto numero 1
-   if (ADx > 20)                                   sellConditions[8] = true; // ADX > 20
-   if (Close[0] < b)                             sellConditions[9] = true; // Il prezzo è sotto alla media lenta
-   //if (Close[0] < a)                               sellConditions[9] = true; // Il prezzo è sotto alla media veloce
+   if ( Close[1] < minSAR)                                sellConditions[0] = true; // la barra di ieri ha chiuso sotto al minSAR
+   if( existOrder(1) < 0)                                 sellConditions[1] = true; // non ho altri ordini sell attivi
    
    
    if(
          (sellConditions[0])  
-      && (sellConditions[1]) 
-      && (sellConditions[2]) 
-      && (sellConditions[3]) 
-      && (sellConditions[4]) 
-      && (sellConditions[5]) 
-      //&& (sellConditions[6]) 
-      && (sellConditions[7]) 
-      //&& (sellConditions[8]) 
-      && (sellConditions[9]) 
-   )
+      && (sellConditions[1])  
+     )
 
    {
 
@@ -316,13 +278,12 @@ if (sortieSell == 0)
         || (OrderMagicNumber() != SIGNATURE)
         || (OrderType() != 1)) continue;
         
-         //Print("Trovato Ordine Sell da controllare : ",OrderTicket());
+        //Print("Trovato Ordine Sell da controllare : ",OrderTicket());
         
         //clausole di chiusura
-        if ((MarketInfo(nomIndice,MODE_ASK) > OrderStopLoss() - (1000*Point))   // Raggiunto SL
-          ||(MarketInfo(nomIndice,MODE_ASK) < OrderTakeProfit() + (1000*Point)) // Raggiunto TP
-          ||(isCameBack(OrderTicket()) && (numberOfOrders > 1)) // Prezzo tornato indietro dopo aver visto un profitto pari al rischio
-          || (MarketInfo(nomIndice,MODE_BID) > a)                               // Il prezzo sale sopra la media veloce
+        if ( (Close[1] > maxSAR)                                                // Superato maxSAR
+//          ||(MarketInfo(nomIndice,MODE_ASK) > OrderStopLoss() - (1000*Point))   // Raggiunto SL
+//          ||(MarketInfo(nomIndice,MODE_ASK) < OrderTakeProfit() + (1000*Point)) // Raggiunto TP
           )
         {
          sortieSell = OrderTicket();       
@@ -363,14 +324,16 @@ int ouvertureBuy()
    {
       if(entreeBuy == true)
 
-      {   stoploss   = (Low[1] - (SL_added_pips*Point));
+      {  
+         /*
+         stoploss   = (Low[1] - (SL_added_pips*Point));
    
          takeprofit = High[1] + ((High[1] - stoploss) * orx * TP_Multiplier) ;
    
-         stoploss   = NormalizeDouble(stoploss-1000*Point ,MarketInfo(nomIndice,MODE_DIGITS));
+         stoploss   = NormalizeDouble(stoploss-10000*Point ,MarketInfo(nomIndice,MODE_DIGITS));
    
-         takeprofit = NormalizeDouble(takeprofit+1000*Point,MarketInfo(nomIndice,MODE_DIGITS));
-   
+         takeprofit = NormalizeDouble(takeprofit+10000*Point,MarketInfo(nomIndice,MODE_DIGITS));
+         */
         
    
          ticketBuy = OrderSend(nomIndice,OP_BUY,setPower(POWER),MarketInfo(nomIndice,MODE_ASK),8,stoploss,takeprofit,COMMENT ,SIGNATURE,0,MediumBlue);
@@ -442,15 +405,15 @@ int ouvertureSell()
       if(entreeSell == true)
    
       {
-         
+         /* 
          stoploss   = (High[1] + (SL_added_pips*Point));
    
          takeprofit = Low[1] - ((stoploss - Low[1]) * orx * TP_Multiplier);
          
-         stoploss   = NormalizeDouble(stoploss+1000*Point,MarketInfo(nomIndice,MODE_DIGITS));
+         stoploss   = NormalizeDouble(stoploss+10000*Point,MarketInfo(nomIndice,MODE_DIGITS));
    
-         takeprofit = NormalizeDouble(takeprofit-1000*Point,MarketInfo(nomIndice,MODE_DIGITS));
-   
+         takeprofit = NormalizeDouble(takeprofit-10000*Point,MarketInfo(nomIndice,MODE_DIGITS));
+         */
         
    
          ticketSell = OrderSend(nomIndice,OP_SELL,setPower(POWER),MarketInfo(nomIndice,MODE_BID),8,stoploss,takeprofit,COMMENT ,SIGNATURE,0,Purple);
@@ -495,7 +458,7 @@ int fermetureSell(int tkt)
 
    //-------------------confirmation du close buy--------------------------+
 
-   if (t == true) {sortieSell = 0; addOrderToHistory(tkt); ticketSell = 0; }
+   if (t == true) {sortieSell = 0; addOrderToHistory(tkt); ticketSell = 0;}
 
    }
 
@@ -508,43 +471,30 @@ int fermetureSell(int tkt)
 
 
 
-//------- VERIFICA ESISTENZA ORDINI IN QUESTA BARRA ----------+
+//------- VERIFICA ESISTENZA ORDINI APERTI ----------+
 
-bool chk_ordersOnThisBar(int tik) 
+int existOrder(int ot) 
    {
-      
-      //se c'è un ordine nella barra attuale è per forza l'ultimo inserito, non certo uno più vecchio
-      if (OrderSelect(tik, SELECT_BY_TICKET)==true)
-      {
-         int shift = iBarShift(nomIndice,0,OrderOpenTime(),false);
-         
-         if (shift == 0)  
-            return true;   
-         else
-            return false;
-      }
-      
-      /*
+      // ot = orderType: 0 = buy; 1 = sell
       int total = OrdersTotal();
-      mn = SIGNATURE;
-      s = nomIndice;
       
       for(int pos=0;pos<total;pos++)
       {
          if(OrderSelect(pos,SELECT_BY_POS)==false) continue;
-         if ((OrderMagicNumber() == SIGNATURE) && (OrderSymbol() == nomIndice) && ((OrderType() == 0) || (OrderType() == 1)) && (OrderCloseTime() == = 0) )
-         
-         return true;
+         if ( (OrderMagicNumber() == SIGNATURE) && (OrderSymbol() == nomIndice) && (OrderType() == 0) && (OrderCloseTime() == 0) && (ot == 0) )         
+         return OrderTicket();
+         if ((OrderMagicNumber() == SIGNATURE) && (OrderSymbol() == nomIndice) && (OrderType() == 1) && (OrderCloseTime() == 0) && (ot == 1) )         
+         return OrderTicket();
       }
       
-      return false;      
-      */
+      return -1;    
+
    
    }
 //-----------------end----------------------------------------+ 
 
 
-//--- Verifica se un ordine torna indietro dopo aver fisto un certo profitto ----------------------------+ 
+//--- Verifica se un ordine torna indietro dopo aver visto un certo profitto ----------------------------+ 
 
 bool isCameBack(int tkt)
 {
@@ -577,11 +527,162 @@ bool isCameBack(int tkt)
          {result = true; Print("Order Sell ", tkt, " is Coming Back: CHIUDO");}
       }
        
-      return result;
    }
+      return result;
 
 }
 //-----------------end----------------------------------------+ 
+
+
+
+//---------STARTING ATR CALCULATION WITH JWW ORIGINAL METHOD------------+ 
+double getATR(int t){
+   
+   double a, b, c, dailyATR, jww_atr;
+   jww_atr = 0;
+   
+   for(int j=2; j<=(t+1); j++){
+   
+      a = High[t] - Low[t];
+      b = High[t] - Close[t+1];
+      c = Close[t+1] - Low[t];
+      
+      //prendo il valore massimo tra quelli analizzati
+      dailyATR = MathMax(a,b);
+      dailyATR = MathMax(dailyATR,c);
+      
+      //sommo l'atr ai precedenti
+      jww_atr = jww_atr + dailyATR;
+   }
+   
+   //atr è la media di questi valori
+   jww_atr = jww_atr/t;
+   
+   return jww_atr;
+   
+}
+//-----------------end----------------------------------------+ 
+
+
+
+
+//--- Restituisce il SIC attuale ----------------------------+ 
+// SIC è la più vantaggiosa chiusura vista nelle ultime t barre o da quando il trade è stato aperto
+double getSIC(int shift, string type)
+{
+   //shift: numero di giorni da guardare indietro
+   //type: indica se cercare la chiusura più alta o quella più bassa e può essere "max" o "min"
+
+   shift = shift + 1; //dato che lavoro sulla apertura della barra zero, devo guardare indietro di una barra in più.
+   double max_, min_;
+   double result = -1;
+   int tkt = 0;
+   int oshift = 0;
+     
+   if (type == "max") // massima chiusura vista
+   {
+      // se c'è un ordine aperto, prendo la sua barra come shift
+      tkt = existOrder(0); //buy order
+      
+      if (tkt > 0)
+      {
+         //Print("getSIC - Esiste ordine BUY: ",tkt);
+         if (OrderSelect(tkt,SELECT_BY_TICKET)==true)
+         oshift = iBarShift(nomIndice,0,OrderOpenTime(),false);
+      }
+      
+      // dato che l'ordine potrebbe essere recente, prendo il maggiore tra 
+      shift = MathMax(shift, oshift);
+      
+      max_ = Close[iHighest(nomIndice,0,MODE_CLOSE,shift,2)];
+      {result = max_;}
+   }
+
+
+   if (type == "min") // minima chiusura vista
+   {
+      // se c'è un ordine aperto, prendo la sua barra come shift
+      tkt = existOrder(1); //sell order
+      
+      
+      if (tkt > 0)
+      {
+         //Print("getSIC - Esiste ordine SELL: ",tkt);
+         if (OrderSelect(tkt,SELECT_BY_TICKET)==true)
+         oshift = iBarShift(nomIndice,0,OrderOpenTime(),false);
+      }
+
+      // dato che l'ordine potrebbe essere recente, prendo il maggiore tra 
+      shift = MathMax(shift, oshift);
+            
+      min_ = Close[iLowest(nomIndice,0,MODE_CLOSE,shift,2)];
+      {result = min_;}
+   }
+    
+   return result;
+
+
+}
+//-----------------end----------------------------------------+ 
+
+void drawSAR(double maxSAR_, double minSAR_)
+{  
+  string object_name;
+  uint on = GetTickCount();
+ 
+  // maxSAR      
+  object_name = "maxSAR_"+on;
+  if(ObjectFind(object_name)<0)
+     {
+      //--- if not found, create it
+      if(ObjectCreate(object_name,OBJ_ARROW,0,Time[1],maxSAR_))
+        {
+         //--- set object properties
+         //--- arrow code
+         ObjectSet(object_name,OBJPROP_ARROWCODE,4);
+         
+         //--- color
+         ObjectSet(object_name,OBJPROP_COLOR,DodgerBlue);
+         //--- price
+         ObjectSet(object_name,OBJPROP_PRICE1,maxSAR_);
+         //--- time
+         ObjectSet(object_name,OBJPROP_TIME1,Time[1]);
+        }
+     }
+   else
+     {
+      //--- if the object exists, just modify its price coordinate
+      ObjectSet(object_name,OBJPROP_PRICE1,maxSAR_);
+      //--- and it's time
+      ObjectSet(object_name,OBJPROP_TIME1,Time[1]);
+     }   
+     
+  // minSAR      
+  object_name = "minSAR_"+on;
+  if(ObjectFind(object_name)<0)
+     {
+      //--- if not found, create it
+      if(ObjectCreate(object_name,OBJ_ARROW,0,Time[1],minSAR_))
+        {
+         //--- set object properties
+         //--- arrow code
+         ObjectSet(object_name,OBJPROP_ARROWCODE,4);
+         //--- color
+         ObjectSet(object_name,OBJPROP_COLOR,clrBrown);
+         //--- price
+         ObjectSet(object_name,OBJPROP_PRICE1,minSAR_);
+         //--- time
+         ObjectSet(object_name,OBJPROP_TIME1,Time[1]);
+        }
+     }
+   else
+     {
+      //--- if the object exists, just modify its price coordinate
+      ObjectSet(object_name,OBJPROP_PRICE1,minSAR_);
+      //--- and it's time
+      ObjectSet(object_name,OBJPROP_TIME1,Time[1]);
+     }        
+}
 
 
 //-------------------prints------------------------------+
@@ -615,10 +716,14 @@ int commentaire()
             "\n LAST TRADE PIPS  : ",historicPips[ArraySize(historicPips)-1],
             
             "\n POWER            : ",POWER,
+
+            "\n ATR            : ",atr,
+            "\n maxSAR            : ",getSIC(period,"min"),"+",C,"*",atr," = ",maxSAR,
+            "\n minSAR            : ",getSIC(period,"max"),"-",C,"*",atr," = ",minSAR,
             
             "\n +-----------------------------   ",
-            "\n BUY Conditions   : ",buyConditions[0],buyConditions[1],buyConditions[2],buyConditions[3],buyConditions[4],buyConditions[5],buyConditions[6],
-            "\n SELL Conditions  : ",sellConditions[0],sellConditions[1],sellConditions[2],sellConditions[3],sellConditions[4],sellConditions[5],sellConditions[6],
+            "\n BUY Conditions   : ",buyConditions[0],buyConditions[1],
+            "\n SELL Conditions  : ",sellConditions[0],sellConditions[1],
             "\n +-----------------------------   ",
 
 
