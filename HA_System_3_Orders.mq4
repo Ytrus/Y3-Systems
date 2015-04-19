@@ -339,32 +339,30 @@ int paramD1()
 // la procedura fermetureBuy(ticket) chiuderà l'ordine azzerando poi la variabile sortieBuy = 0
 // se non ce la fa devo ripassare lo stesso ticket a fermetureBuy, finchè ce la fa.
 
-if (sortieBuy == 0)
-   {//scorrere gli ordini per vedere se uno va chiuso
-   for(int pos=0;pos<OrdersTotal();pos++)
-       {
-        if( (OrderSelect(pos,SELECT_BY_POS)==false)
-        || (OrderSymbol() != nomIndice)
-        || (OrderMagicNumber() != SIGNATURE)
-        || (OrderType() != 0)) continue;
-        
-        // Print("Trovato Ordine Buy da controllare : ",OrderTicket());
-        
-        //clausole di chiusura
-        if ((isCameBack(OrderTicket()))                                          // Se ha raggiunto il primo TP e torna indietro
-          ||(MarketInfo(nomIndice,MODE_BID) <= OrderStopLoss() + (1000*Point))     // Raggiunto SL
-          ||(MarketInfo(nomIndice,MODE_BID) >= OrderTakeProfit() - (1000*Point))   // Raggiunto TP
-           )
-        {
-         sortieBuy = OrderTicket();       
-         Print("Trovato Ordine Buy da chiudere: ",OrderTicket());
+//scorrere gli ordini per vedere se uno va chiuso
+for(int pos=0;pos<OrdersTotal();pos++)
+    {
+     if( (OrderSelect(pos,SELECT_BY_POS)==false)
+     || (OrderSymbol() != nomIndice)
+     || (OrderMagicNumber() != SIGNATURE)
+     || (OrderType() != 0)) continue;
+     
+     // Print("Trovato Ordine Buy da controllare : ",OrderTicket());
+     
+     //clausole di chiusura
+     if ((isCameBack(OrderTicket()))                                          // Se ha raggiunto il primo TP e torna indietro
+       ||(MarketInfo(nomIndice,MODE_BID) <= OrderStopLoss() + (1000*Point))     // Raggiunto SL
+       ||(MarketInfo(nomIndice,MODE_BID) >= OrderTakeProfit() - (1000*Point))   // Raggiunto TP
+        )
+     {
+      sortieBuy = OrderTicket();       
+      Print("Trovato Ordine Buy da chiudere: ",OrderTicket());
 
-         fermetureBuy(OrderTicket());
-        }
+      fermetureBuy(OrderTicket());
+     }
 
-       }
+    }
    
-   }
 
 
 //-----------------end---------------------------------------------+
@@ -410,32 +408,31 @@ if (sortieBuy == 0)
  
 //-----------------exit sell orders---------------------------+
 
-if (sortieSell == 0)
-   {//scorrere gli ordini per vedere se uno va chiuso
-   for(pos=0;pos<OrdersTotal();pos++)
-       {
-        if( (OrderSelect(pos,SELECT_BY_POS)==false)
-        || (OrderSymbol() != nomIndice)
-        || (OrderMagicNumber() != SIGNATURE)
-        || (OrderType() != 1)) continue;
-        
-        //Print("Trovato Ordine Sell da controllare : ",OrderTicket());
-        
-        //clausole di chiusura
-        if ( (isCameBack(OrderTicket()))                                          // Se ha raggiunto il primo TP e torna indietro
-          ||(MarketInfo(nomIndice,MODE_ASK) >= OrderStopLoss() - (1000*Point))     // Raggiunto SL
-          ||(MarketInfo(nomIndice,MODE_ASK) <= OrderTakeProfit() + (1000*Point))   // Raggiunto TP
-          )
-        {
-         sortieSell = OrderTicket();       
-         Print("Trovato Ordine Sell da chiudere: ",OrderTicket());
 
-         fermetureSell(OrderTicket());
-        }
+//scorrere gli ordini per vedere se uno va chiuso
+for(pos=0;pos<OrdersTotal();pos++)
+    {
+     if( (OrderSelect(pos,SELECT_BY_POS)==false)
+     || (OrderSymbol() != nomIndice)
+     || (OrderMagicNumber() != SIGNATURE)
+     || (OrderType() != 1)) continue;
+     
+     //Print("Trovato Ordine Sell da controllare : ",OrderTicket());
+     
+     //clausole di chiusura
+     if ( (isCameBack(OrderTicket()))                                          // Se ha raggiunto il primo TP e torna indietro
+       ||(MarketInfo(nomIndice,MODE_ASK) >= OrderStopLoss() - (1000*Point))     // Raggiunto SL
+       ||(MarketInfo(nomIndice,MODE_ASK) <= OrderTakeProfit() + (1000*Point))   // Raggiunto TP
+       )
+     {
+      sortieSell = OrderTicket();       
+      Print("Trovato Ordine Sell da chiudere: ",OrderTicket());
 
-       }
+      fermetureSell(OrderTicket());
+     }
+
+    }
    
-   } 
 
 //-----------------end---------------------------------------------+
 
@@ -484,7 +481,12 @@ int ouvertureBuy()
          //------------------confirmation du passage ordre Buy-----------------+
    
          if(ticketBuy > 0) 
-            {if (orx == numberOfOrders) tradeBuy = true;}
+            {if (orx == numberOfOrders) 
+               {tradeBuy = true; 
+                  bool mailRessult = SendMail("HA System ha aperto"+ orx +" posizioni BUY", "Nessuna informazione aggiuntiva.");
+                  if (mailRessult == false) Print("Errore durante invio email BUY: "+ GetLastError());
+               }
+            }
          else
             {orx--;}
       }
@@ -566,7 +568,12 @@ int ouvertureSell()
    
          if(ticketSell > 0)
             {Print("Inserito ordine "+orx+" di "+numberOfOrders+".");
-            if (orx == numberOfOrders) tradeSell = true; }
+            if (orx == numberOfOrders) 
+               {tradeSell = true; 
+                  bool mailRessult = SendMail("HA System ha aperto"+ orx +" posizioni BUY", "Nessuna informazione aggiuntiva.");
+                  if (mailRessult == false) Print("Errore durante invio email SELL: "+ GetLastError());
+               }
+            }
          else
             {orx--; } //fallito inserimento, porto indietro il counter per riprovare
       }
