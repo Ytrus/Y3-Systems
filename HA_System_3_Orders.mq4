@@ -483,7 +483,7 @@ int ouvertureBuy()
          if(ticketBuy > 0) 
             {if (orx == numberOfOrders) 
                {tradeBuy = true; 
-                  bool mailRessult = SendMail("HA System ha aperto"+ orx +" posizioni BUY", "Nessuna informazione aggiuntiva.");
+                  bool mailRessult = SendMail("HA System ha aperto "+ orx +" posizioni BUY", "Nessuna informazione aggiuntiva.");
                   if (mailRessult == false) Print("Errore durante invio email BUY: "+ GetLastError());
                }
             }
@@ -570,7 +570,7 @@ int ouvertureSell()
             {Print("Inserito ordine "+orx+" di "+numberOfOrders+".");
             if (orx == numberOfOrders) 
                {tradeSell = true; 
-                  bool mailRessult = SendMail("HA System ha aperto"+ orx +" posizioni BUY", "Nessuna informazione aggiuntiva.");
+                  bool mailRessult = SendMail("HA System ha aperto "+ orx +" posizioni SELL", "Nessuna informazione aggiuntiva.");
                   if (mailRessult == false) Print("Errore durante invio email SELL: "+ GetLastError());
                }
             }
