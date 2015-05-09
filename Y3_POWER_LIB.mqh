@@ -26,17 +26,25 @@ Il sistema registra il profitto in pips di ogni ordine relativo a questo EA e qu
 ne crea una media e "sospende" i trade quando la performance del programma scende sotto alla media stessa. 
 La sospensione non è reale: i trade vengono fatti con 0.01 lotti in modo da tenere sempre traccia dei pips guadagnati o persi, ma annullando quasi le perdite monetarie.
 
+
+01/05/2015 =========================================
+aggiunto sistema di adaptive MA Period.
+Di default è disattivo per compatibilità con i vecchi EA che usano questa libreria.
+Se attivo il periodo della ma dei pips guadagnati viene allungato se il sistema perde: più perde più si allunga.
+Ad oggi i vantaggi non sono chiari: le preformance sono meglio con un ma=5 (sul bot HA), ma questo sistema sembra adattarsi bene ai cambiamenti del mercato, e lo fa da solo
+Se si attiva Adaptive, il valore indicato come Y3_maPeriod diventa il minimo periodo possibile. Il sistema lo allunga al bisogno, ma non lo accorcia oltre a quello.
 */
 
-double historicPips[];
+double historicPips[], historicPipsMA[];
 string HistoryFileName = "noName";
 double macurrent = 0; //ma on historicPips
 double newPower = 0;
-int Y3_maPeriod = 5;
+int Y3_maPeriod = 3;
 bool enableLibrary = true;
+bool enableAdaptive = false;
 
 
-int initY3_POWER_LIB(string fileName, int magic, int maPeriod=5, bool enable=true){
+int initY3_POWER_LIB(string fileName, int magic, int maPeriod=3, bool enable=true, bool adaptive = false){
    
    // set the name of the file
    HistoryFileName = fileName+Symbol()+".csv";
@@ -44,12 +52,16 @@ int initY3_POWER_LIB(string fileName, int magic, int maPeriod=5, bool enable=tru
    //delete old file, if exists
    deleteFile(HistoryFileName);
    
-   //initialize history
-   initOrderHistory(magic);
-   
    Y3_maPeriod = maPeriod;
    
    enableLibrary = enable;
+   
+   //initialize history
+   initOrderHistory(magic);
+   
+   //enable Adaptive maPeriod
+   enableAdaptive = adaptive;
+
    
    return(0);
 
@@ -109,16 +121,48 @@ int addOrderToHistory(int ticket){
    
 
    //prepare the array as timeSeries
-   ArraySetAsSeries(historicPips, true);   
-   //calculate the moving averages on earned pips
-   macurrent=iMAOnArray(historicPips,0,Y3_maPeriod,0,MODE_SMA,0);
+   ArraySetAsSeries(historicPips, true);
    
-   Print("addOrderToHistory - pips: ",historicPips[0], " - iMA: ",macurrent);
+   
+   // ==============================
+   // test adaptive average system
+   // ==============================
+
+   // versione 2: Y3
+   // più tempo passo sotto la media, più allungo la media. Al contrario, quando ci passo sopra, la accorcio per seguire il movimento più da vicino
+   // per farlo mi serve lo storico delle medie, visto che vano calcolate con periodi diversi nel tempo. Per farlo ho creato un array historicPipsMA[]
+   k = ArraySize(historicPipsMA); //get array size
+   ArrayResize(historicPipsMA,k+1,100000); //increment it by one to put in the new MA value
+   
+   // giro l'array per cercarci dentro come una timeseries
+   ArraySetAsSeries(historicPipsMA, true);
+   
+   // cerco quante volte i pips sono stati sotto alla media negli ultimi n trades
+   int underTheMA = 0;
+   int adaptive_maPeriod = Y3_maPeriod;
+   for (int i=0; ((i<=10) && (i<k)) ; i++){
+      if (historicPips[i] <= historicPipsMA[i]) 
+         underTheMA = underTheMA + 2;
+   }
+   // agguingo al minimo, il valore variabile
+   if (enableAdaptive == true) {adaptive_maPeriod = Y3_maPeriod + underTheMA; Print("addOrderToHistory() - Adaptive maPeriod ATTIVO");}
+   
+   // =============== end ===========
+   
+   //calculate the moving averages on earned pips
+   macurrent=iMAOnArray(historicPips,0,adaptive_maPeriod,0,MODE_SMA,0);
+
+   
+   //aggiungo il nuovo valore della media nell'array historicPipsMA
+   historicPipsMA[0] = macurrent;
+   
+   Print("addOrderToHistory - pips: ",historicPips[0], " - iMA: ",historicPipsMA[0]);
    
    ArraySetAsSeries(historicPips, false);
-
+   ArraySetAsSeries(historicPipsMA, false);
+   
    //scrivo su un file i pips, la media e il numero di lotti per verificare con excel
-   addToFile(HistoryFileName, ticket, k, pips, historicPips[k], macurrent, orderSize);
+   addToFile(HistoryFileName, ticket, k, pips, historicPips[k], macurrent, adaptive_maPeriod, orderSize );
 
 
    return(0);
@@ -132,19 +176,23 @@ double setPower(double originalPower){
 
    //prepare the array as timeSeries
    ArraySetAsSeries(historicPips, true);
+   ArraySetAsSeries(historicPipsMA, true);
+
    
    //calculate the moving averages on earned pips
-   macurrent=iMAOnArray(historicPips,0,Y3_maPeriod,0,MODE_SMA,0);
+   macurrent = historicPipsMA[0]; //macurrent=iMAOnArray(historicPips,0,adaptive_maPeriod,0,MODE_SMA,0);
    
    Print("setPower - pips: ",historicPips[0], " - iMA: ",macurrent);
    
    if (historicPips[0] < macurrent) { // if performance goes under ema, limit the lot size to 0.01
       
-      if (enableLibrary==true) //activate reduction only if library is enabled
-         if ((nomIndice == "GER30") || (nomIndice == "FRA40") || (nomIndice == "XAUUSD") || (nomIndice == "USOil"))
-            {newPower = 1;}
-         else
-            {newPower = 0.01;}
+      if (enableLibrary==true) {//activate reduction only if library is enabled
+         
+         double minLot = MarketInfo(nomIndice,MODE_MINLOT);
+         
+         newPower = minLot;
+
+         }
       else
          newPower = originalPower;
    }
@@ -161,7 +209,7 @@ double setPower(double originalPower){
 
 
 // -------------- write data to file -------------+
-int addToFile(string fileName, string ticket, int k, int orderpips, int pips, double ma, double lots){
+int addToFile(string fileName, string ticket, int k, int orderpips, int pips, double ma, int maPeriod, double lots){
       
    //se il file non esiste, lo creo
    int file_handle=FileOpen(fileName,FILE_READ|FILE_WRITE|FILE_CSV);
@@ -174,7 +222,7 @@ int addToFile(string fileName, string ticket, int k, int orderpips, int pips, do
       if (FileSeek(file_handle,0,SEEK_END)==true)
       {
          //--- write values to the file
-         FileWrite(file_handle,ticket,"k="+k,orderpips,pips,ma,lots);
+         FileWrite(file_handle,ticket,"k="+k,orderpips,pips,MathRound(ma),maPeriod,lots);
          PrintFormat("Data is written, %s file is closed",fileName);
       }
       //--- close the file
