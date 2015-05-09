@@ -35,6 +35,7 @@ extern int SL_added_pips = 2; // distanza in pip da aggiungere allo SL. Lo SL è 
 extern string nameOfHistoryFile = "HA_System_HST_";
 extern int Y3_POWER_LIB_maPeriod = 3;
 extern bool enablePowerLIB = true;
+extern bool enableAdaptive_ma = false;
 
 
 
@@ -121,7 +122,7 @@ int init()
    nomIndice = Symbol();
    
    // inizializzo la powerLib
-   initY3_POWER_LIB(nameOfHistoryFile,SIGNATURE,Y3_POWER_LIB_maPeriod,enablePowerLIB);
+   initY3_POWER_LIB(nameOfHistoryFile,SIGNATURE,Y3_POWER_LIB_maPeriod,enablePowerLIB, enableAdaptive_ma);
    
    
    //Creo i rettangoli usato per la visualizzazione dei massimi e quello per i minimi
