@@ -138,6 +138,20 @@ int init()
       ObjectSet("minRangeBox",OBJPROP_COLOR,Maroon);
    
 
+
+   //Creo le linee linee che definiscono atr14 ed il suo 10%
+   if (ObjectCreate(NULL,"ATR14B",OBJ_TREND,0,0,0,0,0) == false) 
+      Alert("Errore nella creazione di ATR14B: "+GetLastError());
+   else
+      ObjectSet("ATR14B",OBJPROP_COLOR,clrLightGray);   
+      ObjectSet("ATR14B",OBJPROP_RAY_RIGHT,false); 
+
+   if (ObjectCreate(NULL,"ATR14B10",OBJ_TREND,0,0,0,0,0) == false) 
+      Alert("Errore nella creazione di ATR14B10: "+GetLastError());
+   else
+      ObjectSet("ATR14B10",OBJPROP_COLOR,clrLightGray);   
+      ObjectSet("ATR14B10",OBJPROP_RAY_RIGHT,false); 
+
 //----
 
    return(0);
@@ -351,9 +365,11 @@ for(int pos=0;pos<OrdersTotal();pos++)
      // Print("Trovato Ordine Buy da controllare : ",OrderTicket());
      
      //clausole di chiusura
-     if ((isCameBack(OrderTicket()))                                          // Se ha raggiunto il primo TP e torna indietro
-       ||(MarketInfo(nomIndice,MODE_BID) <= OrderStopLoss() + (1000*Point))     // Raggiunto SL
-       ||(MarketInfo(nomIndice,MODE_BID) >= OrderTakeProfit() - (1000*Point))   // Raggiunto TP
+     if (//(profitProtection(OrderTicket()))                                     // Se ha raggiunto ATR14 e torna indietro
+       (isCameBack(OrderTicket()))                                           // se ha raggiunto il primo target e torna indietro
+       //|| (riskManagement(OrderTicket()))                                      // se tocco una banda di bollinger opposta
+       ||(MarketInfo(nomIndice,MODE_BID) <= OrderStopLoss() + (1000*Point))    // Raggiunto SL
+       ||(MarketInfo(nomIndice,MODE_BID) >= OrderTakeProfit() - (1000*Point))  // Raggiunto TP
         )
      {
       sortieBuy = OrderTicket();       
@@ -421,7 +437,9 @@ for(pos=0;pos<OrdersTotal();pos++)
      //Print("Trovato Ordine Sell da controllare : ",OrderTicket());
      
      //clausole di chiusura
-     if ( (isCameBack(OrderTicket()))                                          // Se ha raggiunto il primo TP e torna indietro
+     if ( //(profitProtection(OrderTicket()))                                     // Se ha raggiunto ATR14 e torna indietro
+        (isCameBack(OrderTicket()))                                           // se ha raggiunto il primo target e torna indietro
+       //|| (riskManagement(OrderTicket()))                                      // se tocco una banda di bollinger opposta
        ||(MarketInfo(nomIndice,MODE_ASK) >= OrderStopLoss() - (1000*Point))     // Raggiunto SL
        ||(MarketInfo(nomIndice,MODE_ASK) <= OrderTakeProfit() + (1000*Point))   // Raggiunto TP
        )
@@ -667,6 +685,57 @@ bool chk_ordersOnThisBar(int tik)
 
 //--- Verifica se un ordine torna indietro dopo aver visto un certo profitto ----------------------------+ 
 
+bool profitProtection(int tkt)
+{
+
+   int shift;
+   double minProfitTarget, maxPaperProfit, protectedProfit, hiddener = 0;
+   bool result = false;
+   
+   if (OrderSelect(tkt, SELECT_BY_TICKET)==true) 
+   {
+      //se questo ordine ha visto sulla carta un profitto pari ad ATR14 della barra di apertura, sposto lo SL a protezione del 10% del guadagno visto
+      //in seguito, se il profitto supera 20 volte il guadagno dello Stop Profit, sposto lo stop profit al 10% del profitto visto
+      
+      shift = iBarShift(nomIndice,0,OrderOpenTime(),false);
+      minProfitTarget = 2*NormalizeDouble(iATR(nomIndice,0,14,shift),MarketInfo(nomIndice,MODE_DIGITS));  // il profitto che cerco all'inizio è ATR(14)
+      
+          
+      if ((OrderType() == OP_BUY) && (shift > 0)) // buy order
+      {
+         
+         maxPaperProfit = ( High[iHighest(nomIndice,0,MODE_HIGH,shift,0)] - OrderOpenPrice() ); //Print("isCameBack BUY: profit="+profit+" -- max_="+max_+" -- shift="+shift);
+         protectedProfit = NormalizeDouble(maxPaperProfit/10, MarketInfo(nomIndice,MODE_DIGITS));
+         
+         //visual lines
+         ObjectSet( "ATR14B",OBJPROP_TIME1,OrderOpenTime() ); ObjectSet("ATR14B",OBJPROP_PRICE1,OrderOpenPrice()+minProfitTarget); //minProfitTargetLine
+         ObjectSet( "ATR14B",OBJPROP_TIME2,TimeCurrent() ); ObjectSet("ATR14B",OBJPROP_PRICE2,OrderOpenPrice()+minProfitTarget); //minProfitTargetLine
+      
+         if ( (maxPaperProfit >= minProfitTarget) && (MarketInfo(nomIndice,MODE_BID) <= OrderOpenPrice()+protectedProfit) )
+         {result = true; Print("profitProtection: BUY order ", tkt, " CHIUDERE");}
+      
+      }
+
+ 
+      if ((OrderType() == OP_SELL) && (shift > 0) ) // sell order
+      {
+         maxPaperProfit = ( OrderOpenPrice() - Low[iLowest(nomIndice,0,MODE_LOW,shift,0)]); //Print("isCameBack SELL: profit="+profit+" -- min_="+min_+" -- shift="+shift);
+         protectedProfit = NormalizeDouble( maxPaperProfit/10, MarketInfo(nomIndice,MODE_DIGITS) );
+         
+         if ( (maxPaperProfit >= minProfitTarget) && (MarketInfo(nomIndice,MODE_BID) >= OrderOpenPrice() - protectedProfit ) )
+         {result = true; Print("profitProtection: SELL order ", tkt, " CHIUDERE");}
+      }
+       
+   }
+      return result;
+
+}
+//-----------------end----------------------------------------+ 
+
+
+
+//--- Verifica se un ordine torna indietro dopo aver visto un certo profitto ----------------------------+ 
+
 bool isCameBack(int tkt)
 {
 
@@ -703,6 +772,52 @@ bool isCameBack(int tkt)
 
 }
 //-----------------end----------------------------------------+ 
+
+
+
+
+//--- Risk management, per ridurre le perdite quando non si vede un profitto sufficiente ----------------------------+ 
+
+bool riskManagement(int tkt)
+{
+
+   int shift;
+   double lowerLimit, higherLimit;
+   bool result = false;
+   
+   if (OrderSelect(tkt, SELECT_BY_TICKET)==true) 
+   {
+      //se il prezzo va nella direzione sbagliata fino a toccare la barra di bollinger opposta, lo chiudo
+      
+      shift = iBarShift(nomIndice,0,OrderOpenTime(),false);
+
+      lowerLimit = iBands(nomIndice,0,14,2,0,PRICE_MEDIAN,MODE_LOWER,0);
+      higherLimit = iBands(nomIndice,0,14,2,0,PRICE_MEDIAN,MODE_UPPER,0);
+      
+          
+      if ((OrderType() == OP_BUY) && (shift > 0)) // buy order
+      {
+         
+         if (MarketInfo(nomIndice,MODE_BID) <= lowerLimit )
+         {result = true; Print("riskManagement: BUY order ", tkt, " CHIUDERE");}
+      
+      }
+
+ 
+      if ((OrderType() == OP_SELL) && (shift > 0) ) // sell order
+      {
+         
+         if ( MarketInfo(nomIndice,MODE_BID) >= higherLimit )
+         {result = true; Print("riskManagement: SELL order ", tkt, " CHIUDERE");}
+      }
+       
+   }
+      return result;
+
+}
+
+
+
 
 
 //--------------- SIZE AUTOMATICA ----------------------------+ 
