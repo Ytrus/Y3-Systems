@@ -760,14 +760,17 @@ double autoTargetMultiplier(double maxMultiplier){
    // con 0 ordini in perdita, restituisco maxMultiplier
    // con 10 ordini in perdita restituisco 1
    
-   
+   int i = 0;
    int o = 0;
+   
    double step = 0; // un decimo della distanza tra 1 e maxMultiplier
    step = (maxMultiplier - 1)/10;
    step = NormalizeDouble(step,2);
-   
+
+   o = 0; //azzero il contatore
+    
    //loop history and get orders of this robot
-   for (int i=OrdersHistoryTotal()-1; i>=0; i--) 
+   for (i=OrdersHistoryTotal()-1; i>=0; i--) 
    {
       if ( (OrderSelect(i,SELECT_BY_POS,MODE_HISTORY)==true) && (OrderMagicNumber()==SIGNATURE) && (OrderSymbol()==nomIndice) )
       {
