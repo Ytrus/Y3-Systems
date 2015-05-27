@@ -29,12 +29,12 @@ extern int startingHour = 6; //orario di apertura da cui iniziare a verificare  
 extern int endingHour = 17; //orario di fine attività per questo strumento. Probabilmente sarà da tarare.
 
 extern double TP_Multiplier = 1; // imposta il rapporto rischio/rendimento. da 1:1 in su su TUTTI gli ordini
-extern double TP_Paolone_Multiplier = 2; // moltiplicatore degli ordini dalla parte giusta della media di bollinger
-extern int numberOfOrders = 3; //usato per decidere quanti ordini aprire per ogni posizione. Moltiplica anche la distanza del TP (x1, x2, x3 etc)
+extern double TP_Paolone_Multiplier = 3; // moltiplicatore degli ordini dalla parte giusta della media di bollinger
+extern int numberOfOrders = 1; //usato per decidere quanti ordini aprire per ogni posizione. Moltiplica anche la distanza del TP (x1, x2, x3 etc)
 extern int SL_added_pips = 2; // distanza in pip da aggiungere allo SL. Lo SL è uguale al massimo(minimo) della barra precedente + questo numero di pips. Così è gestibile per ogni strumento.
 
 extern string nameOfHistoryFile = "HA_System_HST_";
-extern int Y3_POWER_LIB_maPeriod = 3;
+extern int Y3_POWER_LIB_maPeriod = 5;
 extern bool enablePowerLIB = true;
 extern bool enableAdaptive_ma = true;
 extern bool enableClassicSL = true;
@@ -127,7 +127,7 @@ int init()
    nomIndice = Symbol();
    
    // inizializzo la powerLib
-   initY3_POWER_LIB(nameOfHistoryFile,SIGNATURE,Y3_POWER_LIB_maPeriod,enablePowerLIB, enableAdaptive_ma);
+   int PL = initY3_POWER_LIB(nameOfHistoryFile,SIGNATURE,Y3_POWER_LIB_maPeriod,enablePowerLIB, enableAdaptive_ma);
    
    
    //Creo i rettangoli usato per la visualizzazione dei massimi e quello per i minimi
@@ -510,7 +510,7 @@ int ouvertureBuy()
          if(ticketBuy > 0) 
             {if (orx == numberOfOrders) 
                {tradeBuy = true; 
-                  bool mailRessult = SendMail("HA System ha aperto "+ orx +" posizioni BUY", "Nessuna informazione aggiuntiva.");
+                  bool mailRessult = SendMail("HA System ha aperto "+ orx +" posizioni BUY", "Strumento:"+ nomIndice +" -  "+ size);
                   if (mailRessult == false) Print("Errore durante invio email BUY: "+ GetLastError());
                }
             }
@@ -790,7 +790,7 @@ double autoTargetMultiplier(double maxMultiplier){
    // mai minore di 1
    if (maxMultiplier < 1) maxMultiplier = 1;
    
-   Print("autoTargetMultiplier: ",maxMultiplier );
+   //Print("autoTargetMultiplier: ",maxMultiplier );
    return maxMultiplier;
 
 }
@@ -1157,28 +1157,38 @@ int commentaire()
 
  
 
-    Comment( "\n +--------------------------------------------------------+\n EXPERT : ",nomIndice,
+    Comment( "\n +--------------------------------------------------------+\n Y3_HA_System : ",nomIndice,
 
             "\n DATE : ", dj,
 
           
 
             "\n +--------------------------------------------------------+\n   ",
-
-            "\n TICKET BUY       : ",ticketBuy,
-
-            "\n TICKET SELL      : ",ticketSell,
             
-            "\n TRADES           : ",ArraySize(historicPips),
+            "\n",
             
-            "\n LAST TRADE PIPS  : ",historicPips[ArraySize(historicPips)-1],
+            "\n Base POWER                 : ",POWER,
             
-            "\n POWER            : ",POWER,
+            "\n SL Added Pips              : ",SL_added_pips,
             
-            "\n +-----------------------------   ",
-            "\n BUY Conditions   : ",buyConditions[0],buyConditions[1],
-            "\n SELL Conditions  : ",sellConditions[0],sellConditions[1],
-            "\n +-----------------------------   ",
+            "\n Base TPMultip.             : ",TP_Paolone_Multiplier,
+            
+            "\n ",
+            
+            "\n TRADES                     : ",ArraySize(historicPips),
+            
+            "\n Pips / LIB                 : ",historicPips[ArraySize(historicPips)-1], " / ", historicPipsMA[ArraySize(historicPipsMA)-1],
+            
+            "\n Next Order TPMultip.       : ",autoTargetMultiplier(TP_Paolone_Multiplier),
+            
+            "\n Periods Base / Adaptive    : ",Y3_POWER_LIB_maPeriod ," / ", adaptive_maPeriod,
+            
+            "\n Next Order Size            : ",setPower(POWER),
+            
+//            "\n +-----------------------------   ",
+//            "\n BUY Conditions   : ",buyConditions[0],buyConditions[1],
+//            "\n SELL Conditions  : ",sellConditions[0],sellConditions[1],
+//            "\n +-----------------------------   ",
 
 
             "\n +--------------------------------------------------------+\n ");
