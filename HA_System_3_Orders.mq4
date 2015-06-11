@@ -40,10 +40,7 @@ extern bool enableAdaptive_ma = true;
 extern bool enableClassicSL = true;
 extern bool enableClassicTP = true;
 extern bool enableAutoProfitMultiplier = true;
-extern bool enableRiskManagement = false;
-extern bool enableProfitProtection = false;
-extern bool enableAutoProfit = false;
-extern bool enableSAR = false;
+
 
 
 //+------------------------------------------------------------------+
@@ -308,7 +305,7 @@ int paramD1()
    if (nearestMin < min+tollerance)                            buyConditions[4] = true; //il minimo delle ultime 3 barre era vicino al minimo assoluto della giornata
    if (MarketInfo(nomIndice,MODE_BID) >= min)                  buyConditions[5] = true; // se il prezzo sta scendendo non devo rientrare (mi ha già buttato fuori quando ho toccato min)
    if (MarketInfo(nomIndice,MODE_BID) < upperband)             buyConditions[6] = true; // non devo essere oltre la banda superiore
-   if (!existOpendedAndClosedOnThisBar(2))                      buyConditions[7] = true; // Se non ho 2 ordini aperti e chiusi in questa barra
+   if (!existOpendedAndClosedOnThisBar(2))                     buyConditions[7] = true; // Se non ho 2 ordini aperti e chiusi in questa barra
    if (Low[0] > min)                                           buyConditions[8] = true; // solo se la barra attuale non è anche il minimo di giornata 
    if (!existOrderOnThisBar(0))                                buyConditions[9] = true; // se NON ho un ordine già aperto in questa barra (apre un solo ordine per ogni direzione)
    if (existOrder(0) < 0)                                      buyConditions[10] = true; // non ho già un ordine aperto in questa direzione (apre un solo ordine per direzione)
@@ -359,13 +356,9 @@ for(int pos=0;pos<OrdersTotal();pos++)
      // Print("Trovato Ordine Buy da controllare : ",OrderTicket());
      
      //clausole di chiusura
-     if ((profitProtection(OrderTicket()))                                     // Se ha raggiunto ATR14 e torna indietro
-       || (isCameBack(OrderTicket()))                                          // se ha raggiunto il primo target e torna indietro
-       || (riskManagement(OrderTicket()))                                      // se tocco una banda di bollinger opposta
+     if ((isCameBack(OrderTicket()))                                          // se ha raggiunto il primo target e torna indietro
        || (slReached(OrderTicket()))                                           // Raggiunto SL
        || (tpReached(OrderTicket()))                                           // Raggiunto TP
-       || (autoProfit(OrderTicket()))                                          // TP adattivo con Bollinger
-       || (sarStop(OrderTicket()))                                             // Stop con Parabolic SAR
      )
      {
       sortieBuy = OrderTicket();       
@@ -433,13 +426,9 @@ for(pos=0;pos<OrdersTotal();pos++)
      //Print("Trovato Ordine Sell da controllare : ",OrderTicket());
      
      //clausole di chiusura
-     if ( (profitProtection(OrderTicket()))                                     // Se ha raggiunto ATR14 e torna indietro
-       || (isCameBack(OrderTicket()))                                           // se ha raggiunto il primo target e torna indietro
-       || (riskManagement(OrderTicket()))                                       // se tocco una banda di bollinger opposta
+     if ( (isCameBack(OrderTicket()))                                           // se ha raggiunto il primo target e torna indietro
        || (slReached(OrderTicket()))                                            // Raggiunto SL
        || (tpReached(OrderTicket()))                                            // Raggiunto TP
-       || (autoProfit(OrderTicket()))                                           // TP adattivo con Bollinger
-       || (sarStop(OrderTicket()))                                              // Stop con Parabolic SAR
        )
      {
       sortieSell = OrderTicket();       
@@ -797,54 +786,6 @@ double autoTargetMultiplier(double maxMultiplier){
 
 
 
-//--- Verifica se un ordine torna indietro dopo aver visto un certo profitto ----------------------------+ 
-
-bool profitProtection(int tkt)
-{
-
-   //se la funzione è disattivata, esco prima di iniziare
-   if (enableProfitProtection == false) return false;
-   
-   int shift;
-   double minProfitTarget, maxPaperProfit, protectedProfit, hiddener = 0;
-   bool result = false;
-   
-   if (OrderSelect(tkt, SELECT_BY_TICKET)==true) 
-   {
-      //se questo ordine ha visto sulla carta un profitto pari ad ATR14 della barra di apertura, sposto lo SL a protezione del 10% del guadagno visto
-      //in seguito, se il profitto supera 20 volte il guadagno dello Stop Profit, sposto lo stop profit al 10% del profitto visto
-      
-      shift = iBarShift(nomIndice,0,OrderOpenTime(),false);
-      minProfitTarget = 2*NormalizeDouble(iATR(nomIndice,0,14,shift),MarketInfo(nomIndice,MODE_DIGITS));  // il profitto che cerco all'inizio è ATR(14)
-      
-          
-      if ((OrderType() == OP_BUY) && (shift > 0)) // buy order
-      {
-         
-         maxPaperProfit = ( High[iHighest(nomIndice,0,MODE_HIGH,shift,0)] - OrderOpenPrice() ); 
-         protectedProfit = NormalizeDouble(maxPaperProfit/10, MarketInfo(nomIndice,MODE_DIGITS));
-         
-      
-         if ( (maxPaperProfit >= minProfitTarget) && (MarketInfo(nomIndice,MODE_BID) <= OrderOpenPrice()+protectedProfit) )
-         {result = true; Print("profitProtection: BUY order ", tkt, " CHIUDERE");}
-      
-      }
-
- 
-      if ((OrderType() == OP_SELL) && (shift > 0) ) // sell order
-      {
-         maxPaperProfit = ( OrderOpenPrice() - Low[iLowest(nomIndice,0,MODE_LOW,shift,0)]); 
-         protectedProfit = NormalizeDouble( maxPaperProfit/10, MarketInfo(nomIndice,MODE_DIGITS) );
-         
-         if ( (maxPaperProfit >= minProfitTarget) && (MarketInfo(nomIndice,MODE_BID) >= OrderOpenPrice() - protectedProfit ) )
-         {result = true; Print("profitProtection: SELL order ", tkt, " CHIUDERE");}
-      }
-       
-   }
-      return result;
-
-}
-//-----------------end----------------------------------------+ 
 
 
 
@@ -920,41 +861,6 @@ bool tpReached(int tkt)
 
 
 
-// Parabolic SAR stop
-bool sarStop(int tkt)
-{
-
-   //se la funzione è disattivata, esco prima di iniziare
-   if (enableSAR == false) return false;
-
-   double hiddener = 0;
-   bool result = false;
-   hiddener = 1000*Point; // gli SL sono mascheratti
-   double SAR[2];
-   SAR[0] = iSAR(nomIndice,0,0.02,0.2,0);
-   SAR[1] = iSAR(nomIndice,0,0.02,0.2,1);
-   
-   if (OrderSelect(tkt, SELECT_BY_TICKET)==true) 
-   {
-     
-      if ((OrderType() == OP_BUY) ) // buy order
-      {
-         if ((Close[1] > SAR[1]) && (Close[0] <= SAR[0]))
-         {result = true; Print("sarStop: BUY order ", tkt, " - CHIUDERE - SAR=", SAR[1], "-", SAR[0]);}
-      }
-
- 
-      if ((OrderType() == OP_SELL) ) // sell order
-      {
-         if ((Close[1] < SAR[1]) && (Close[0] >= SAR[0]))
-         {result = true; Print("sarStop: SELL order ", tkt, " - CHIUDERE");}
-      }
-       
-   }
-      return result;
-
-}
-//-----------------end----------------------------------------+ 
 
 
 
@@ -999,103 +905,6 @@ bool isCameBack(int tkt)
 
 
 
-
-//--- Risk management, per ridurre le perdite quando non si vede un profitto sufficiente ----------------------------+ 
-
-bool riskManagement(int tkt)
-{
-
-   //se la funzione è disattivata, esco prima di iniziare
-   if (enableRiskManagement == false) return false;
-
-   int shift;
-   double lowerLimit, higherLimit;
-   bool result = false;
-   
-   if (OrderSelect(tkt, SELECT_BY_TICKET)==true) 
-   {
-      //se il prezzo va nella direzione sbagliata fino a toccare la barra di bollinger opposta, lo chiudo
-      
-      shift = iBarShift(nomIndice,0,OrderOpenTime(),false);
-
-      lowerLimit = iBands(nomIndice,0,14,2,0,PRICE_MEDIAN,MODE_LOWER,0);
-      higherLimit = iBands(nomIndice,0,14,2,0,PRICE_MEDIAN,MODE_UPPER,0);
-      
-          
-      if ((OrderType() == OP_BUY) && (shift > 0)) // buy order
-      {
-               
-         if (MarketInfo(nomIndice,MODE_BID) <= lowerLimit )
-         {result = true; Print("riskManagement: BUY order ", tkt, " CHIUDERE");}
-      
-      }
-
- 
-      if ((OrderType() == OP_SELL) && (shift > 0) ) // sell order
-      {
-         
-         if ( MarketInfo(nomIndice,MODE_BID) >= higherLimit )
-         {result = true; Print("riskManagement: SELL order ", tkt, " CHIUDERE");}
-      }
-       
-   }
-      return result;
-
-}
-
-
-
-bool autoProfit(int tkt){
-   // restituisce true se il trade è da chiudere
-   
-   //se la funzione è disattivata, esco prima di iniziare
-   if (enableAutoProfit == false) return false;
-   
-   // questa funzione chiude i loss quando toccano la banda di bollinger opposta
-   
-   
-   //TODO: verificare se ha senso chiudere la posizione quando si raggiunge il TP con la media in perdita
-   
-   int shift;
-   double bid;
-   double lowerLimit[2], medianLimit[2], upperLimit[2]; // i valori delle 3 bande di bollinger
-   bool result = false;
-   int hiddener = 1000;
-   
-   // il prezzo attuale sul grafico (bid)
-   bid = MarketInfo(nomIndice,MODE_BID);
-   
-   // le bande di bollinger
-   lowerLimit[0] = iBands(nomIndice,0,14,2,0,PRICE_MEDIAN,MODE_LOWER,0);
-   medianLimit[0] = iBands(nomIndice,0,14,2,0,PRICE_MEDIAN,MODE_MAIN,0);
-   upperLimit[0] = iBands(nomIndice,0,14,2,0,PRICE_MEDIAN,MODE_UPPER,0);
-
-   // shift della barra dell'ordine
-   shift = iBarShift(nomIndice,0,OrderOpenTime(),false);
-   
-   if (OrderSelect(tkt, SELECT_BY_TICKET)==true){   
-      
-      if ((OrderType() == OP_BUY) && (shift > 0)) // buy order
-      {
-
-         if ( (bid <= lowerLimit[0]) && (bid < OrderOpenPrice()) ) {Print("autoProfit:(BUY "+tkt+") tornato alla media di bollinger"); return true;}
-            
-      }
-
- 
-      if ((OrderType() == OP_SELL) && (shift > 0) ) // sell order
-      {
-
-         // chiudo solo se tocco la media e siamo in perdita
-         if ( (bid >= upperLimit[0]) && (bid > OrderOpenPrice())) {Print("autoProfit:(SELL "+tkt+") tornato alla media di bollinger"); return true;}
-            
-      }
-            
-            
-     }
-    
-    return false;
-}
 
 
 
