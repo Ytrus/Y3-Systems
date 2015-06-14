@@ -35,7 +35,7 @@ Ad oggi i vantaggi non sono chiari: le preformance sono meglio con un ma=5 (sul 
 Se si attiva Adaptive, il valore indicato come Y3_maPeriod diventa il minimo periodo possibile. Il sistema lo allunga al bisogno, ma non lo accorcia oltre a quello.
 */
 
-double historicPips[], historicPipsMA[];
+double historicPips[], historicPipsMA[], listOfPips[];
 string HistoryFileName = "noName";
 double macurrent = 0; //ma on historicPips
 double newPower = 0;
@@ -97,10 +97,13 @@ int addOrderToHistory(int ticket){
    int k = ArraySize(historicPips); //get array size
    //Print("addOrderToHistory - Array size: "+k);
    ArrayResize(historicPips,k+1,100000); //increment it by one to put in the new profit or loss in pips
+   
 
    double orderSize;
    
    int pips;
+   
+   double stDev = 0;
    
    if(OrderSelect(ticket, SELECT_BY_TICKET)==true)
     {
@@ -119,15 +122,17 @@ int addOrderToHistory(int ticket){
 
    
    historicPips[k] = historicPips[k-1]+pips;
+   
    //Print("addOrderToHistory: historicPips["+k+"]"+historicPips[k]);
    
 
    //prepare the array as timeSeries
    ArraySetAsSeries(historicPips, true);
    
+
    
    // ==============================
-   // test adaptive average system
+   // adaptive average system
    // ==============================
 
    // versione 2: Y3
@@ -143,39 +148,90 @@ int addOrderToHistory(int ticket){
    int underTheMA = 0; 
    adaptive_maPeriod = Y3_maPeriod; 
 
-   for (int i=1; ((i<=10) && (i<=k)) ; i++){
+
+/*
+    // ====== Test con Deviazione Standard ============================
+    
+      ArrayResize(listOfPips,k+1,100000); // increment listOfPips, too
+      listOfPips[k] = pips; //add last trade's pips to the list of pips
+      ArraySetAsSeries(listOfPips, true);    
+
+
+    // se i pips scendono sotto alla media di ieri...
+    if (historicPips[0] < historicPipsMA[1]){
+      
+      // la deviazione standard è da sommare, perchè la media deve rimanere sopra
+      stDev = MathAbs(iStdDevOnArray(listOfPips,k,k,0,MODE_EMA,0));
+   
+      Print("addOrderToHistory: Ord."+ticket+" - pips: k="+k+" -- historicPips[0] < historicPipsMA[1]  --- stDev="+stDev);
+      
+    }
+    
+    else{
+      
+      // la deviazione standard è da sottrarre, perchè la media deve rimanere sopra
+      stDev = 0 - MathAbs(iStdDevOnArray(listOfPips,k,k,0,MODE_EMA,0));
+
+      Print("addOrderToHistory: Ord."+ticket+" - pips: k="+k+" -- historicPips[0] >= historicPipsMA[1]  --- stDev="+stDev);
+               
+    }
+    
+    ArraySetAsSeries(listOfPips, false);
+    
+*/
+
+
+    // ====== Fine Test con Deviazione Standard ============================
+           
+       
+      
+   for (int i=1; ((i<=11) && (i<=k)) ; i++){
       
       if (historicPips[i] <= historicPipsMA[i]) {
 
-         // i trade + vicini hanno un peso molto superiore
-         //underTheMA = underTheMA + 11-i; 
          
-         // testo calcolo media libreria
-         if (i <= 2) underTheMA += 1;
+         // test calcolo media libreria GAU ver.6
+/*        if (i <= 2) underTheMA += 1;
          if ((3 <= i) && (i <= 4)) underTheMA += 2;
          if ((5 <= i) && (i <= 6)) underTheMA += 3;
          if ((7 <= i) && (i <= 8)) underTheMA += 2;
          if ((9 <= i) && (i <= 10)) underTheMA += 1;
+*/
 
+         // ==== GAU EVOLUTA ==== ver.7
+         if (i == 1) underTheMA += 1;
+         if (i == 2) underTheMA += 2;
+         if (i == 3) underTheMA += 4;
+         if (i == 4) underTheMA += 6;
+         if (i == 5) underTheMA += 8;
+         if (i == 6) underTheMA += 10;
+         if (i == 7) underTheMA += 8;
+         if (i == 8) underTheMA += 6;
+         if (i == 9) underTheMA += 4;
+         if (i == 10) underTheMA += 2;
+         if (i == 11) underTheMA += 1;
 
 /*
-         if (i == 1) underTheMA += 5;
-         if (i == 2) underTheMA += 4;
-         if (i == 3) underTheMA += 3;
-         if (i == 4) underTheMA += 2;
-         if (i == 5) underTheMA += 1;
-         if (i == 6) underTheMA += 2;
-         if (i == 7) underTheMA += 3;
-         if (i == 8) underTheMA += 4;
-         if (i == 9) underTheMA += 5;
-         if (i == 10) underTheMA += 0;
- */        
+         // ==== GAU EVOLUTA ==== ver.8
+         if (i == 1) underTheMA += 1;
+         if (i == 2) underTheMA += 3;
+         if (i == 3) underTheMA += 6;
+         if (i == 4) underTheMA += 9;
+         if (i == 5) underTheMA += 6;
+         if (i == 6) underTheMA += 3;
+         if (i == 7) underTheMA += 1;
+*/
          
+       }
          
-         
-         }
-   }  
-   
+       
+       
+       
+
+              
+       
+   }  //for
+  
 
    // agguingo al minimo, il valore variabile
    if (enableAdaptive == true) { 
@@ -194,7 +250,14 @@ int addOrderToHistory(int ticket){
    
    //calculate the moving averages on earned pips
    macurrent=iMAOnArray(historicPips,0,adaptive_maPeriod,0,MODE_SMA,0);
-
+   
+   
+   
+   //maY3 ver.8
+   macurrent = macurrent + stDev;
+   
+   
+   
    
    //aggiungo il nuovo valore della media nell'array historicPipsMA
    historicPipsMA[0] = MathRound(macurrent);
