@@ -813,7 +813,9 @@ bool slReached(int tkt)
  
       if ((OrderType() == OP_SELL) ) // sell order
       {
-         if (MarketInfo(nomIndice,MODE_ASK) >= OrderStopLoss() - hiddener)
+         
+         //if (MarketInfo(nomIndice,MODE_ASK) >= OrderStopLoss() - hiddener) //versione originale
+         if (MarketInfo(nomIndice,MODE_BID) >= OrderStopLoss() - hiddener) //versione originale
          {result = true; Print("slReached: SELL order ", tkt, " - CHIUDERE");}
       }
        
