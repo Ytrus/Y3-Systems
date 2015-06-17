@@ -149,9 +149,8 @@ int addOrderToHistory(int ticket){
    adaptive_maPeriod = Y3_maPeriod; 
 
 
-/*
     // ====== Test con Deviazione Standard ============================
-    
+/*    
       ArrayResize(listOfPips,k+1,100000); // increment listOfPips, too
       listOfPips[k] = pips; //add last trade's pips to the list of pips
       ArraySetAsSeries(listOfPips, true);    
@@ -178,13 +177,12 @@ int addOrderToHistory(int ticket){
     
     ArraySetAsSeries(listOfPips, false);
     
+
 */
-
-
     // ====== Fine Test con Deviazione Standard ============================
            
        
-      
+
    for (int i=1; ((i<=11) && (i<=k)) ; i++){
       
       if (historicPips[i] <= historicPipsMA[i]) {
@@ -196,8 +194,8 @@ int addOrderToHistory(int ticket){
          if ((5 <= i) && (i <= 6)) underTheMA += 3;
          if ((7 <= i) && (i <= 8)) underTheMA += 2;
          if ((9 <= i) && (i <= 10)) underTheMA += 1;
-*/
 
+*/
          // ==== GAU EVOLUTA ==== ver.7
          if (i == 1) underTheMA += 1;
          if (i == 2) underTheMA += 2;
@@ -220,18 +218,25 @@ int addOrderToHistory(int ticket){
          if (i == 5) underTheMA += 6;
          if (i == 6) underTheMA += 3;
          if (i == 7) underTheMA += 1;
+
+
+
+         // ==== GAU EVOLUTA ==== ver.9
+         if (i == 1) underTheMA += 1;
+         if (i == 2) underTheMA += 3;
+         if (i == 3) underTheMA += 6;
+         if (i == 4) underTheMA += 9;
+         if (i == 5) underTheMA += 12;
+         if (i == 6) underTheMA += 9;
+         if (i == 7) underTheMA += 6;
+         if (i == 8) underTheMA += 3;
+         if (i == 9) underTheMA += 1;
 */
          
        }
          
        
-       
-       
-
-              
-       
    }  //for
-  
 
    // agguingo al minimo, il valore variabile
    if (enableAdaptive == true) { 
