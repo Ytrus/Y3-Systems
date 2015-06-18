@@ -98,7 +98,8 @@ double atr, ARC, maxSAR, minSAR;
 
 //+--------------- Include ------------------------+
 
-#include  <Y3_POWER_LIB.mqh>
+#include  "Y3_POWER_LIB.mqh"
+//#include  "Y3_POWER_LIB_v.2.mqh"
 
 // ------ esperimenti col messagebox -------
 //#import "user32.dll"
