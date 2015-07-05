@@ -500,8 +500,8 @@ int ouvertureBuy()
          if(ticketBuy > 0) 
             {if (orx == numberOfOrders) 
                {tradeBuy = true; 
-                  bool mailRessult = SendMail("HA System ha aperto "+ orx +" posizioni BUY", "Strumento:"+ nomIndice +" -  "+ size);
-                  if (mailRessult == false) Print("Errore durante invio email BUY: "+ GetLastError());
+                  bool mailResult = SendMail("HA System ha aperto "+ orx +" posizioni BUY", "Strumento:"+ nomIndice +" -  "+ setPower(size));
+                  if (mailResult == false) Print("Errore durante invio email BUY: "+ GetLastError());
                }
             }
          else
@@ -602,8 +602,8 @@ int ouvertureSell()
             {Print("Inserito ordine "+orx+" di "+numberOfOrders+".");
             if (orx == numberOfOrders) 
                {tradeSell = true; 
-                  bool mailRessult = SendMail("HA System ha aperto "+ orx +" posizioni SELL", "Strumento:"+ nomIndice +" -  "+ size);
-                  if (mailRessult == false) Print("Errore durante invio email SELL: "+ GetLastError());
+                  bool mailResult = SendMail("HA System ha aperto "+ orx +" posizioni SELL", "Strumento:"+ nomIndice +" -  "+ setPower(size));
+                  if (mailResult == false) Print("Errore durante invio email SELL: "+ GetLastError());
                }
             }
          else
