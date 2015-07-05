@@ -208,8 +208,8 @@ int addOrderToHistory(int ticket){
          if (i == 9) underTheMA += 4;
          if (i == 10) underTheMA += 2;
          if (i == 11) underTheMA += 1;
-
 /*
+
          // ==== GAU EVOLUTA ==== ver.8
          if (i == 1) underTheMA += 1;
          if (i == 2) underTheMA += 3;
@@ -364,6 +364,67 @@ int deleteFile(string fileName)
 
 
 // ------------------end--------------------------+
+
+
+
+// --------------- MA AUTOADATTIVA ---------------+
+int getMaFilter(int maxMaValue){
+   // guardo gli ultimi 5 trades e per ogni perdente sottraggo 5 al maxMaValue
+   
+   int i = 0;
+   int sub = 0; //valore da sottrarre al periodo della MA, variabile o fisso
+   int k = ArraySize(historicPips); //get array size
+   int result = maxMaValue;
+   
+   // se non ho almeno 1 trade chiuso, esco restituendo maxMaValue
+   if (k < 1) return result;
+   
+   //altrimenti se ne ho 6 o più uso 6. Se ne ho meno di 6 uso quelli che ho
+   //me ne servono 6 per sapere il risultato del trade 5 che è uguale a 5-6
+   if (k >= 8) k = 8;
+   
+   // giro l'array per prendere gli ultimi trades da 0 a 6
+   ArraySetAsSeries(historicPips, true);
+   
+   
+   // ora scorro i trades. Se sono perdenti sottraggo 5 al risultato (che sarà il periodo della media mobile)
+   for (i=0; i<k; i++){
+   
+      // esco al penultimo se k > 5 
+      if ( (k>7) && (i == k-2) ) break;
+      
+      //il valore da sottrarre dipende dalla posizione in cui si trova il trade perdente
+      if (i == 0) sub = 1;
+      if (i == 1) sub = 3;
+      if (i == 2) sub = 5;
+      if (i == 3) sub = 7;
+      if (i == 4) sub = 5;
+      if (i == 5) sub = 3;
+      if (i == 6) sub = 1;
+      
+      // se i == k-1 e k == i+1 sono nell'ultimo trade disponibile, 
+      // quindi devo usare il suo valore per sapere se era vincente o perdente
+      if ((i==k-1) && (k == i+1)) 
+         { if (historicPips[i] < 0) result = result - sub; }
+      
+      //altrimenti per saperlo devo sottrarlo al valore precedente
+      else 
+         {if (historicPips[i] - historicPips[i+1] < 0) result = result - sub; }
+   
+   }
+   
+   
+   ArraySetAsSeries(historicPips, false);
+   
+   return result;
+   
+   
+   
+
+}
+// ------------------end--------------------------+
+
+
 
 
 
