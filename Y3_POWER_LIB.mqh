@@ -392,8 +392,14 @@ int getMaFilter(int maxMaValue){
    
       // esco al penultimo se k > 5 
       if ( (k>7) && (i == k-2) ) break;
+
+      // ================ VER. 1 - 5 fisso  ============================
+      //sub = 5;
+      // ================ VER. 2 - 5 fisso  ============================
+
+
       
-      //il valore da sottrarre dipende dalla posizione in cui si trova il trade perdente
+      // ================ VER. 2 - GAUSSIANA  ============================
       if (i == 0) sub = 1;
       if (i == 1) sub = 3;
       if (i == 2) sub = 5;
@@ -401,7 +407,12 @@ int getMaFilter(int maxMaValue){
       if (i == 4) sub = 5;
       if (i == 5) sub = 3;
       if (i == 6) sub = 1;
+      // ================ VER. 2 - GAUSSIANA  ============================
       
+      // ================ VER. 3 - AMA  ============================
+      // La versione 3 non usa questa funzione ma una AMA già fatta (indicatoreCustom)
+      
+
       // se i == k-1 e k == i+1 sono nell'ultimo trade disponibile, 
       // quindi devo usare il suo valore per sapere se era vincente o perdente
       if ((i==k-1) && (k == i+1)) 
