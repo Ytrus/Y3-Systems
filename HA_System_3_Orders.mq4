@@ -245,10 +245,13 @@ int paramD1()
 
 
 
-
+   // la distanza accettabile dai massimi e minimi del giorno per entrare la ricavo dall'ATR 14.
+   // le posizioni long potranno aver raggiunto un prezzo superiore al minimo di giornata pari alla grandezza di tollerance.
+   tollerance = iATR(nomIndice,0,100,0)/3*2;
+   
+   
    if (Volume[0] == 1)
    {
-   
       
       // Determino massimi e minimi di oggi per trovare i punti di inversione
       highestBarShift = iHighest(nomIndice,0,MODE_HIGH,startBarOffset,0);
@@ -261,13 +264,7 @@ int paramD1()
       // minimo e massimo visti nelle ultime 5 barre (per sapere se poter entrare sul reverse)
       nearestMax = High[iHighest(nomIndice,0,MODE_HIGH,5,0)];
       nearestMin = Low[iLowest(nomIndice,0,MODE_LOW,5,0)];
-   }
 
-   // la distanza accettabile dai massimi e minimi del giorno per entrare la ricavo dall'ATR 14.
-   // le posizioni long potranno aver raggiunto un prezzo superiore al minimo di giornata pari alla grandezza di tollerance.
-   tollerance = iATR(nomIndice,0,100,0)/3*2;
-
-   if (Volume[0] == 1) {
       //aggiorno i rettangoli che partono dalle barre maggiore e minore ed arrivano ad ora
       ObjectSet("maxRangeBox",OBJPROP_TIME1,iTime(nomIndice,0,highestBarShift)); ObjectSet("maxRangeBox",OBJPROP_PRICE1,max); //max
       ObjectSet("maxRangeBox",OBJPROP_TIME2,TimeCurrent()); ObjectSet("maxRangeBox",OBJPROP_PRICE2,max-tollerance); //max
