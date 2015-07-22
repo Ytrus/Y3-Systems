@@ -365,33 +365,42 @@ int deleteFile(string fileName)
 
 // ------------------end--------------------------+
 
-
+   string logIt = "";
 
 // --------------- MA AUTOADATTIVA ---------------+
 int getMaFilter(int maxMaValue){
-   // guardo gli ultimi 5 trades e per ogni perdente sottraggo 5 al maxMaValue
+   // guardo gli ultimi n trades e per ogni perdente sottraggo 5 al maxMaValue
+   
+   return maxMaValue;  // debug: per provare con valori fissi senza usare questa adattabilità
    
    int i = 0;
    int sub = 0; //valore da sottrarre al periodo della MA, variabile o fisso
    int k = ArraySize(historicPips); //get array size
    int result = maxMaValue;
    
-   // se non ho almeno 1 trade chiuso, esco restituendo maxMaValue
-   if (k < 1) return result;
+   //numero massimo di trade che mi servono (uno in più rispetto a quelli utilizzati nei calcoli)
+   //int n = 5;
+   int n = maxMaValue-2; // sarebbe maxMaValue - 2(valore minimo ammissibile) +1(perchè me ne serve uno in più)
    
-   //altrimenti se ne ho 6 o più uso 6. Se ne ho meno di 6 uso quelli che ho
-   //me ne servono 6 per sapere il risultato del trade 5 che è uguale a 5-6
-   if (k >= 8) k = 8;
+   // se non ho almeno 1 trade chiuso, esco restituendo maxMaValue
+   if (k < 1)  return result;
+   
+   //altrimenti se ne ho n o più uso n. Se ne ho meno di 6 uso quelli che ho
+   //me ne servono n per sapere il risultato del trade n-1 che è uguale a value(n-1)-value(n)
+   if (k > n) k = n+1;
    
    // giro l'array per prendere gli ultimi trades da 0 a 6
    ArraySetAsSeries(historicPips, true);
    
+   logIt = "=== ";
    
-   // ora scorro i trades. Se sono perdenti sottraggo 5 al risultato (che sarà il periodo della media mobile)
-   for (i=0; i<k; i++){
+   // ora scorro i trades. Se sono perdenti sottraggo x al risultato (che sarà il periodo della media mobile)
+   for (i=1; i<=k; i++){
    
-      // esco al penultimo se k > 5 
-      if ( (k>7) && (i == k-2) ) break;
+   //logIt = logIt +"i="+ i +": k="+k+", n="+n+": ";
+   
+      // se super n sono nel trade oltre a quello che mi serve: esco
+      if (i>n)    break;
 
       // ================ VER. 1 - 5 fisso  ============================
       //sub = 5;
@@ -400,6 +409,7 @@ int getMaFilter(int maxMaValue){
 
       
       // ================ VER. 2 - GAUSSIANA  ============================
+      /*
       if (i == 0) sub = 1;
       if (i == 1) sub = 3;
       if (i == 2) sub = 5;
@@ -407,20 +417,49 @@ int getMaFilter(int maxMaValue){
       if (i == 4) sub = 5;
       if (i == 5) sub = 3;
       if (i == 6) sub = 1;
+      */
       // ================ VER. 2 - GAUSSIANA  ============================
+ 
       
       // ================ VER. 3 - AMA  ============================
       // La versione 3 non usa questa funzione ma una AMA già fatta (indicatoreCustom)
+      // ================ VER. 3 - AMA  ============================
       
 
-      // se i == k-1 e k == i+1 sono nell'ultimo trade disponibile, 
+
+      // ================ VER. 4 - 1 fisso (n = 5)) ============================
+      // Questa versione è fatta per pilotare il fastPeriod dell'ama e deve andare da 1 a 4
+      // per ogni trade perdente sottraggo 1 al risultato
+       sub = 1;
+      // ================ VER. 4 - 1 fisso  ============================
+
+      
+      // ================ VER. 5 - AMA  ============================
+      // Questa versione permette semplicemente di impostare il massimo FastPeriod, come le altre, ma calcola da sola il numero di trade da controllare
+      // in base alla formula numero max di trade da analizzare = maxMaPeriod - 2.
+      // il codice che lo fa è nell'attribuzione del valore alla variabile n ad inizio funzione
+      // lo scopo è quello di avere un valore opportuno per ogni grafico, perchè su alcuni funziona il 3(GER30)e su altri il 4, il 5 etc.
+      // ================ VER. 5 - AMA  ============================
+      
+      
+      
+       
+      // ToDo: testare media EMA con gaussiana uguale a quella della libreria attualwe (ver. 7)
+      
+      
+      
+
+      // se i == k sono nell'ultimo trade disponibile, il primo trade presente nello storico.
       // quindi devo usare il suo valore per sapere se era vincente o perdente
-      if ((i==k-1) && (k == i+1)) 
-         { if (historicPips[i] < 0) result = result - sub; }
+      if (i==k)
+         { if (historicPips[i-1] < 0) result = result - sub; logIt = logIt + ""+i+". "+ historicPips[i-1] + " ||    ";}
       
       //altrimenti per saperlo devo sottrarlo al valore precedente
       else 
-         {if (historicPips[i] - historicPips[i+1] < 0) result = result - sub; }
+         {
+            if (historicPips[i-1] - historicPips[i] < 0) { result = result - sub; }
+            logIt = logIt + ""+ i+". "+ (historicPips[i-1] - historicPips[i]) + "  ||    ";
+         }
    
    }
    
