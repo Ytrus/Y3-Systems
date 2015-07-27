@@ -774,8 +774,13 @@ double autoTargetMultiplier(double maxMultiplier){
       
    }
    
-   // mai minore di 1
+   // mai minore di 1 (ORIGINALE)
    if (maxMultiplier < 1) maxMultiplier = 1;
+   
+   // 27/07/2015 - credo di aver trovato un bug
+   // il maxMultiplier dovrebbe essere 1+il numero trovato! Invece era pari al numero trovato!
+   // maxMultiplier = 1 + maxMultiplier;
+   
    
    //Print("autoTargetMultiplier: ",maxMultiplier );
    return maxMultiplier;
@@ -915,6 +920,7 @@ double getSize(int risk, double distance)
    double equity = AccountEquity();
    double amountRisked = equity/100*risk;
    double finalSize = 0;
+   double tickValue = MarketInfo(nomIndice,MODE_TICKVALUE); //valore di un tick con un lotto 
    double minLot = MarketInfo(nomIndice,MODE_MINLOT);
    
    distance = distance/Point; //la distanza deve sempre essere un intero
@@ -922,22 +928,15 @@ double getSize(int risk, double distance)
    amountRisked = MathRound(amountRisked/numberOfOrders);
    finalSize = amountRisked/distance;
    
-   minLot = minLot * 100;
+   finalSize = amountRisked/(tickValue*distance);
    
-   finalSize = finalSize*minLot; // dovrebbe normalizzare la dimensione in base al tipo di strumento
-   
-   //finalSize = amountRisked/(MarketInfo(nomIndice,MODE_LOTSIZE)*distance);
-   
-   if (nomIndice == "GER30")    finalSize = finalSize*10;
-   
-   if (minLot == 1) finalSize = NormalizeDouble(finalSize, 2);
-   if (minLot == 10) finalSize = NormalizeDouble(finalSize, 1);
-   if (minLot == 100) finalSize = NormalizeDouble(finalSize, 0);
+   // arrotondo i lotti in base a quello che può accettare questo strumento
+   if (minLot == 1) finalSize = NormalizeDouble(finalSize,0);
+   if (minLot == 0.1) finalSize = NormalizeDouble(finalSize,1);
+   if (minLot == 0.01) finalSize = NormalizeDouble(finalSize,2);
    
    
-   //if (finalSize > 3) finalSize = 3;
-   
-   Print("getSize() - Risk="+risk+" - Distamce="+distance+" - amountRisked="+amountRisked+" - finalSize="+finalSize+" - MODE_MINLOT="+MarketInfo(nomIndice,MODE_MINLOT));
+   Print("getSize() - Risk="+risk+" - Distamce="+distance+" - amountRisked="+amountRisked+" - finalSize="+finalSize);
    if (usePercentageRisk == true) 
       return finalSize;
    else
@@ -993,6 +992,9 @@ int commentaire()
             "\n Periods Base / Adaptive    : ",Y3_POWER_LIB_maPeriod ," / ", adaptive_maPeriod,
             
             "\n Next Order Size            : ",setPower(POWER),
+
+            "\n Tick Value                 : ",MarketInfo(nomIndice,MODE_TICKVALUE),
+
             
 //            "\n +-----------------------------   ",
 //            "\n BUY Conditions   : ",buyConditions[0],buyConditions[1],
