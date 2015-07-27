@@ -242,7 +242,11 @@ int addOrderToHistory(int ticket){
    if (enableAdaptive == true) { 
       
       //uso underTheMA slo se è superiore al periodo minimo indicato in Y3_maPeriod
+      // attenzione!!! in questo modo non sommo mai 1 o 2, 3 etc. Sommo minimo 6 solo quando underTheMA è almeno 6 (se Y3_maPeriod è 5)
       if (underTheMA > Y3_maPeriod) adaptive_maPeriod = Y3_maPeriod + underTheMA; 
+      
+      // proviamo a sommare SEMPRE
+      //adaptive_maPeriod = Y3_maPeriod + underTheMA; 
 
       
       //adaptive_maPeriod non può mai superare il massimo numero di valori disponibili, altrimenti sarebbe impossibile calcolare la media
