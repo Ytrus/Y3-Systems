@@ -371,20 +371,23 @@ int deleteFile(string fileName)
 
    string logIt = "";
 
+
+
+
 // --------------- MA AUTOADATTIVA ---------------+
 int getMaFilter(int maxMaValue){
    // guardo gli ultimi n trades e per ogni perdente sottraggo 5 al maxMaValue
    
-   return maxMaValue;  // debug: per provare con valori fissi senza usare questa adattabilità
+   if (enableAdaptive_AMA == false) return maxMaValue;  // Se non è attiva l'adattabilità del periodo dell'AMA, uso semplicemente il suo periodo base
    
    int i = 0;
    int sub = 0; //valore da sottrarre al periodo della MA, variabile o fisso
    int k = ArraySize(historicPips); //get array size
    int result = maxMaValue;
    
-   //numero massimo di trade che mi servono (uno in più rispetto a quelli utilizzati nei calcoli)
-   //int n = 5;
-   int n = maxMaValue-2; // sarebbe maxMaValue - 2(valore minimo ammissibile) +1(perchè me ne serve uno in più)
+   //int n = maxMaValue-2; // sarebbe maxMaValue - 2(valore minimo ammissibile) +1(perchè me ne serve uno in più)
+   int n = 11; // esclusiva per VER.6 , per tutte le altre usare quello sopra
+   result = 0; // esclusiva per VER.6 , per tutte le altre eliminare questa riga
    
    // se non ho almeno 1 trade chiuso, esco restituendo maxMaValue
    if (k < 1)  return result;
@@ -403,7 +406,7 @@ int getMaFilter(int maxMaValue){
    
    //logIt = logIt +"i="+ i +": k="+k+", n="+n+": ";
    
-      // se super n sono nel trade oltre a quello che mi serve: esco
+      // se supero n sono nel trade oltre a quello che mi serve: esco
       if (i>n)    break;
 
       // ================ VER. 1 - 5 fisso  ============================
@@ -434,7 +437,7 @@ int getMaFilter(int maxMaValue){
       // ================ VER. 4 - 1 fisso (n = 5)) ============================
       // Questa versione è fatta per pilotare il fastPeriod dell'ama e deve andare da 1 a 4
       // per ogni trade perdente sottraggo 1 al risultato
-       sub = 1;
+      // sub = 1;
       // ================ VER. 4 - 1 fisso  ============================
 
       
@@ -447,12 +450,44 @@ int getMaFilter(int maxMaValue){
       
       
       
-       
-      // ToDo: testare media EMA con gaussiana uguale a quella della libreria attualwe (ver. 7)
-      
-      
+      // ================ VER. 6 - AMA con periodo gaussiano ============================
+         if (i == 1) sub = 1;
+         if (i == 2) sub = 2;
+         if (i == 3) sub = 4;
+         if (i == 4) sub = 6;
+         if (i == 5) sub = 8;
+         if (i == 6) sub = 10;
+         if (i == 7) sub = 8;
+         if (i == 8) sub = 6;
+         if (i == 9) sub = 4;
+         if (i == 10) sub = 2;
+         if (i == 11) sub = 1;
+      // ATTENZIONE: qui il valore ricevuto (maxValue) sarebbe in realtà minValue, ed ad ogni trade perdente SOMMO result invece di sottrarlo
+      // quindi qui sotto uso righe diverse, fatte apposta per questa versione
+      // ================ VER. 6 - AMA con periodo gaussiano ============================
       
 
+
+
+      // =========== Versione esclusiva per VER. 6 =============================
+      // se i == k sono nell'ultimo trade disponibile, il primo trade presente nello storico.
+      // quindi devo usare il suo valore per sapere se era vincente o perdente
+      if (i==k)
+         { if (historicPips[i-1] < 0) result = result + sub; logIt = logIt + ""+i+". "+ result + " ||    ";}
+      
+      //altrimenti per saperlo devo sottrarlo al valore precedente
+      else 
+         {
+            if (historicPips[i-1] - historicPips[i] < 0) { result = result + sub; }
+            logIt = logIt + ""+ i+". "+ result + "  ||    ";
+         }
+      // ========== Versione esclusiva per VER. 6 ==============================
+      
+      
+      
+      
+      /*
+      // =========== Versione per tutte le altre =============================
       // se i == k sono nell'ultimo trade disponibile, il primo trade presente nello storico.
       // quindi devo usare il suo valore per sapere se era vincente o perdente
       if (i==k)
@@ -464,12 +499,16 @@ int getMaFilter(int maxMaValue){
             if (historicPips[i-1] - historicPips[i] < 0) { result = result - sub; }
             logIt = logIt + ""+ i+". "+ (historicPips[i-1] - historicPips[i]) + "  ||    ";
          }
-   
+      // ========== Versione per tutte le altre ==============================
+      */
+            
    }
    
    
    ArraySetAsSeries(historicPips, false);
    
+   result = result + maxMaValue; //dersione esclusiva per VER.6 - per tutte le altre cancellare
+   if (result < maxMaValue) result = maxMaValue;
    return result;
    
    
