@@ -33,20 +33,23 @@ extern double TP_Paolone_Multiplier = 3; // moltiplicatore degli ordini dalla pa
 extern int numberOfOrders = 1; //usato per decidere quanti ordini aprire per ogni posizione. Moltiplica anche la distanza del TP (x1, x2, x3 etc)
 extern int SL_added_pips = 2; // distanza in pip da aggiungere allo SL. Lo SL è uguale al massimo(minimo) della barra precedente + questo numero di pips. Così è gestibile per ogni strumento.
 
-extern string nameOfHistoryFile = "HA_Trend_System_HST_";
+extern string nameOfHistoryFile = "HA_Trend_System_AMA_HST_";
 extern int Y3_POWER_LIB_maPeriod = 5;
 
 extern string Trend = "=== Media mobile trend ===";
 extern int maFilterPeriod = 9;
+extern int AMAnFast = 2;
+extern bool enableAdaptive_AMA = false;
 
-string bot_name = "HA Trend System";
+string bot_name = "HA Trend AMA System";
+
 
 bool enablePowerLIB = true;
 bool enableAdaptive_ma = true;
 bool enableClassicSL = true;
 bool enableClassicTP = true;
 bool enableAutoProfitMultiplier = true;
-bool enableAdaptive_AMA = false; //per compatibilità con la Y3_POWER_LIB, che lo usa nella versione AMA
+
 
 //+------------------------------------------------------------------+
 
@@ -144,11 +147,12 @@ int init()
    else
       ObjectSet("minRangeBox",OBJPROP_COLOR,Maroon);
    
+
    // ==========================
    //        bot image
    // ==========================
    long current_chart_id = ChartID();
-   string bot_image_path = "\\Images\\Y3_HA_Trend_System.bmp";    // path: terminal_folder\MQL5\Images\euro.bmp
+   string bot_image_path = "\\Images\\Y3_HA_Trend_AMA_System.bmp";    // path: terminal_folder\MQL5\Images\euro.bmp
    //--- creating label bitmap (it does not have time/price coordinates)
    if(!ObjectCreate(0,"bot_image_label",OBJ_BITMAP_LABEL,0,0,0))
      {
@@ -361,8 +365,9 @@ int paramD1()
       double upperband = iBands(nomIndice,0,14,2,0,PRICE_MEDIAN,MODE_UPPER,0);
 
 
-   maFilter = iMA(nomIndice,0,maFilterPeriod,0,MODE_EMA,PRICE_TYPICAL,0);
-
+   //maFilter = iMA(nomIndice,0,getMaFilter(maFilterPeriod),0,MODE_EMA,PRICE_TYPICAL,0);
+   //tentiamo l'utilizzo della AMA per filtrare i segnali
+   maFilter = iCustom(nomIndice,0,"Downloads\\AMA", getMaFilter(maFilterPeriod),AMAnFast,30,2,2, 0,1); //il periodo dell'ama viene gestito da getMaFilter
    
 //-----------------enter buy order---------------------------+
 
@@ -1028,6 +1033,11 @@ int commentaire()
 
    {
 
+   string dj;
+
+ 
+
+   dj = Day()+ " / " + Month() + "   " + Hour() + " : " + Minute()+ " : " + Seconds();
 
  
 
@@ -1045,7 +1055,7 @@ int commentaire()
             "\n ",
             
             "\n TRADES: ",ArraySize(historicPips),
-            
+
             "\n ",
             
             "\n Pips / LIB: ",historicPips[ArraySize(historicPips)-1], " / ", historicPipsMA[ArraySize(historicPipsMA)-1],

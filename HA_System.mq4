@@ -20,8 +20,8 @@ string nomIndice = "GER30"; //sovrascritto dopo in init()
  
 
 //--------number of lots to trade--------------+
-extern int SIGNATURE = 0018100;
-extern string COMMENT = "HA_T";
+extern int SIGNATURE = 0018000;
+extern string COMMENT = "HA";
 extern double POWER = 20; //default per GER30 con 8.000 euro
 extern bool usePercentageRisk = false;
 extern string info_p = "Se usePercentageRisk = true: POWER è la % equity da rishiare ad ogni trade. Altrimenti POWER = Lotti per ordine.";
@@ -33,20 +33,17 @@ extern double TP_Paolone_Multiplier = 3; // moltiplicatore degli ordini dalla pa
 extern int numberOfOrders = 1; //usato per decidere quanti ordini aprire per ogni posizione. Moltiplica anche la distanza del TP (x1, x2, x3 etc)
 extern int SL_added_pips = 2; // distanza in pip da aggiungere allo SL. Lo SL è uguale al massimo(minimo) della barra precedente + questo numero di pips. Così è gestibile per ogni strumento.
 
-extern string nameOfHistoryFile = "HA_Trend_System_HST_";
+extern string nameOfHistoryFile = "HA_System_HST_";
 extern int Y3_POWER_LIB_maPeriod = 5;
+extern bool enablePowerLIB = true;
+extern bool enableAdaptive_ma = true;
+extern bool enableClassicSL = true;
+extern bool enableClassicTP = true;
+extern bool enableAutoProfitMultiplier = true;
 
-extern string Trend = "=== Media mobile trend ===";
-extern int maFilterPeriod = 9;
+bool enableAdaptive_AMA = false; //presente per compatibilità con la libreria Y3_POWER_LIB
+string bot_name = "HA System";
 
-string bot_name = "HA Trend System";
-
-bool enablePowerLIB = true;
-bool enableAdaptive_ma = true;
-bool enableClassicSL = true;
-bool enableClassicTP = true;
-bool enableAutoProfitMultiplier = true;
-bool enableAdaptive_AMA = false; //per compatibilità con la Y3_POWER_LIB, che lo usa nella versione AMA
 
 //+------------------------------------------------------------------+
 
@@ -96,7 +93,7 @@ double min, max; //minimo e massimo di giornata, aggiornati ad ogni nuova barra
 bool buyConditions[20]; 
 bool sellConditions[20]; 
 
-double atr, ARC, maxSAR, minSAR, maFilter;   
+double atr, ARC, maxSAR, minSAR;   
 
 
 
@@ -104,6 +101,7 @@ double atr, ARC, maxSAR, minSAR, maFilter;
 //+--------------- Include ------------------------+
 
 #include  "Y3_POWER_LIB.mqh"
+//#include  "Y3_POWER_LIB_v.2.mqh"
 
 // ------ esperimenti col messagebox -------
 //#import "user32.dll"
@@ -144,11 +142,12 @@ int init()
    else
       ObjectSet("minRangeBox",OBJPROP_COLOR,Maroon);
    
+
    // ==========================
    //        bot image
    // ==========================
    long current_chart_id = ChartID();
-   string bot_image_path = "\\Images\\Y3_HA_Trend_System.bmp";    // path: terminal_folder\MQL5\Images\euro.bmp
+   string bot_image_path = "\\Images\\Y3_HA_System.bmp";    // path: terminal_folder\MQL5\Images\euro.bmp
    //--- creating label bitmap (it does not have time/price coordinates)
    if(!ObjectCreate(0,"bot_image_label",OBJ_BITMAP_LABEL,0,0,0))
      {
@@ -192,7 +191,7 @@ int init()
          ObjectSetInteger(0,"bot_info_box",OBJPROP_YDISTANCE,70);
          //--- set box width and height
          ObjectSetInteger(0,"bot_info_box",OBJPROP_XSIZE,157);
-         ObjectSetInteger(0,"bot_info_box",OBJPROP_YSIZE,180);
+         ObjectSetInteger(0,"bot_info_box",OBJPROP_YSIZE,170);
          //--- set box and borders colors an type
          ObjectSetInteger(0,"bot_info_box",OBJPROP_BGCOLOR,0x3f3f3f);
          ObjectSetInteger(0,"bot_info_box",OBJPROP_BORDER_COLOR,0x807e7e);
@@ -201,6 +200,7 @@ int init()
          ChartRedraw(0);
 
      }
+
 
 //----
 
@@ -226,6 +226,8 @@ int deinit()
    //Elimino i rettangoli usati per la visualizzazione dei massimi e quello per i minimi
    ObjectDelete(ChartID(),"maxRangeBox");
    ObjectDelete(ChartID(),"minRangeBox");
+
+   //ObjectDelete(ChartID(),"bot_image_label");
 
 
 //----
@@ -306,10 +308,13 @@ int paramD1()
 
 
 
-
+   // la distanza accettabile dai massimi e minimi del giorno per entrare la ricavo dall'ATR 14.
+   // le posizioni long potranno aver raggiunto un prezzo superiore al minimo di giornata pari alla grandezza di tollerance.
+   tollerance = iATR(nomIndice,0,100,0)/3*2;
+   
+   
    if (Volume[0] == 1)
    {
-   
       
       // Determino massimi e minimi di oggi per trovare i punti di inversione
       highestBarShift = iHighest(nomIndice,0,MODE_HIGH,startBarOffset,0);
@@ -322,13 +327,7 @@ int paramD1()
       // minimo e massimo visti nelle ultime 5 barre (per sapere se poter entrare sul reverse)
       nearestMax = High[iHighest(nomIndice,0,MODE_HIGH,5,0)];
       nearestMin = Low[iLowest(nomIndice,0,MODE_LOW,5,0)];
-   }
 
-   // la distanza accettabile dai massimi e minimi del giorno per entrare la ricavo dall'ATR 14.
-   // le posizioni long potranno aver raggiunto un prezzo superiore al minimo di giornata pari alla grandezza di tollerance.
-   tollerance = iATR(nomIndice,0,100,0)/3*2;
-
-   if (Volume[0] == 1) {
       //aggiorno i rettangoli che partono dalle barre maggiore e minore ed arrivano ad ora
       ObjectSet("maxRangeBox",OBJPROP_TIME1,iTime(nomIndice,0,highestBarShift)); ObjectSet("maxRangeBox",OBJPROP_PRICE1,max); //max
       ObjectSet("maxRangeBox",OBJPROP_TIME2,TimeCurrent()); ObjectSet("maxRangeBox",OBJPROP_PRICE2,max-tollerance); //max
@@ -337,10 +336,7 @@ int paramD1()
       ObjectSet("minRangeBox",OBJPROP_TIME1,iTime(nomIndice,0,lowestBarShift)); ObjectSet("minRangeBox",OBJPROP_PRICE1,min); //max
       ObjectSet("minRangeBox",OBJPROP_TIME2,TimeCurrent()); ObjectSet("minRangeBox",OBJPROP_PRICE2,min+tollerance); //max
    }
-
-
-
-
+   
 
    h = Hour(); // ora attuale
    
@@ -359,10 +355,6 @@ int paramD1()
    
       double lowerBand = iBands(nomIndice,0,14,2,0,PRICE_MEDIAN,MODE_LOWER,0);
       double upperband = iBands(nomIndice,0,14,2,0,PRICE_MEDIAN,MODE_UPPER,0);
-
-
-   maFilter = iMA(nomIndice,0,maFilterPeriod,0,MODE_EMA,PRICE_TYPICAL,0);
-
    
 //-----------------enter buy order---------------------------+
 
@@ -377,23 +369,21 @@ int paramD1()
    if (!existOpendedAndClosedOnThisBar(2))                     buyConditions[7] = true; // Se non ho 2 ordini aperti e chiusi in questa barra
    if (Low[0] > min)                                           buyConditions[8] = true; // solo se la barra attuale non è anche il minimo di giornata 
    if (!existOrderOnThisBar(0))                                buyConditions[9] = true; // se NON ho un ordine già aperto in questa barra (apre un solo ordine per ogni direzione)
-   // segnale con bug
-   if (MarketInfo(nomIndice,MODE_BID) > maFilter)              buyConditions[10] = true; // il prezzo è sopra alla media mobile
-   // è il segnale che deve essere sopra la media, non il prezzo attule!
-   //if (Close[1] > maFilter)              buyConditions[10] = true; // il prezzo è sopra alla media mobile
+   if (existOrder(0) < 0)                                      buyConditions[10] = true; // non ho già un ordine aperto in questa direzione (apre un solo ordine per direzione)
+   
    
    if(   //(Volume[0] == 1) &&
        (buyConditions[0]) 
       && (buyConditions[1]) 
       && (buyConditions[2]) 
       && (buyConditions[3])
-      //&& (buyConditions[4])
+      && (buyConditions[4])
       && (buyConditions[5]) 
       && (buyConditions[6]) 
       && (buyConditions[7]) 
       && (buyConditions[8]) 
       && (buyConditions[9]) 
-      && (buyConditions[10]) 
+      //&& (buyConditions[10]) 
       //&& (MathAbs(haOpen[1]-haClose[1]) > MathAbs(haHigh[1]-haLow[1])/2 ) //il corpo deve essere maggiore alla metà dell'ombra
    )
    {
@@ -460,23 +450,20 @@ for(int pos=0;pos<OrdersTotal();pos++)
    if (!existOpendedAndClosedOnThisBar(2))                     sellConditions[7] = true; // Se non ho 2 ordini aperti e chiusi in questa barra
    if (High[0] < max)                                          sellConditions[8] = true; // solo se la barra attuale non è anche il massimo di giornata 
    if (!existOrderOnThisBar(1))                                sellConditions[9] = true; // se NON ho un ordine già aperto in questa barra (apre più ordini in ogni direzione)
-   // segnale con bug
-   if (MarketInfo(nomIndice,MODE_BID) < maFilter)              sellConditions[10] = true; // il prezzo è sopra alla media mobile
-   // è il segnale che deve essere sopra la media, non il prezzo attuale!
-   //if (Close[1] < maFilter)                                    sellConditions[10] = true; // il prezzo è sopra alla media mobile
-   
+   if (existOrder(1) < 0 )                                     sellConditions[10] = true;// non ho già un ordine attivo in questa direzione (apre un solo ordine per direzione)
+
    if(    //(Volume[0] == 1) &&
       (sellConditions[0])  
       && (sellConditions[1]) 
       && (sellConditions[2])
       && (sellConditions[3])
-      //&& (sellConditions[4])
+      && (sellConditions[4])
       && (sellConditions[5]) 
       && (sellConditions[6]) 
       && (sellConditions[7]) 
       && (sellConditions[8]) 
       && (sellConditions[9]) 
-      && (sellConditions[10]) 
+      //&& (sellConditions[10]) 
       //&& (MathAbs(haOpen[1]-haClose[1]) > MathAbs(haHigh[1]-haLow[1])/2 ) //il corpo deve essere maggiore alla metà dell'ombra
    )
    {
@@ -573,8 +560,8 @@ int ouvertureBuy()
          if(ticketBuy > 0) 
             {if (orx == numberOfOrders) 
                {tradeBuy = true; 
-                  bool mailRessult = SendMail("HA System ha aperto "+ orx +" posizioni BUY", "Strumento:"+ nomIndice +" -  "+ size);
-                  if (mailRessult == false) Print("Errore durante invio email BUY: "+ GetLastError());
+                  bool mailResult = SendMail("HA System ha aperto "+ orx +" posizioni BUY", "Strumento:"+ nomIndice +" -  "+ setPower(size));
+                  if (mailResult == false) Print("Errore durante invio email BUY: "+ GetLastError());
                }
             }
          else
@@ -675,8 +662,8 @@ int ouvertureSell()
             {Print("Inserito ordine "+orx+" di "+numberOfOrders+".");
             if (orx == numberOfOrders) 
                {tradeSell = true; 
-                  bool mailRessult = SendMail("HA System ha aperto "+ orx +" posizioni SELL", "Strumento:"+ nomIndice +" -  "+ size);
-                  if (mailRessult == false) Print("Errore durante invio email SELL: "+ GetLastError());
+                  bool mailResult = SendMail("HA System ha aperto "+ orx +" posizioni SELL", "Strumento:"+ nomIndice +" -  "+ setPower(size));
+                  if (mailResult == false) Print("Errore durante invio email SELL: "+ GetLastError());
                }
             }
          else
@@ -850,8 +837,13 @@ double autoTargetMultiplier(double maxMultiplier){
       
    }
    
-   // mai minore di 1
+   // mai minore di 1 (ORIGINALE)
    if (maxMultiplier < 1) maxMultiplier = 1;
+   
+   // 27/07/2015 - credo di aver trovato un bug
+   // il maxMultiplier dovrebbe essere 1+il numero trovato! Invece era pari al numero trovato!
+   // maxMultiplier = 1 + maxMultiplier;
+   
    
    //Print("autoTargetMultiplier: ",maxMultiplier );
    return maxMultiplier;
@@ -1028,13 +1020,12 @@ int commentaire()
 
    {
 
-
- 
+   
 
     Comment( "\n ","\n ","\n ","\n ",
             "\n ",bot_name, ": ",nomIndice,
-            
-            "\n",
+
+            "\n ",
             
             "\n Base POWER: ",POWER,
             
@@ -1055,10 +1046,9 @@ int commentaire()
             "\n Periods Base / Adaptive: ",Y3_POWER_LIB_maPeriod ," / ", adaptive_maPeriod,
             
             "\n Next Order Size: ",setPower(POWER),
-                        
-            "\n MA Filter: ",getMaFilter(maFilterPeriod),
 
-            "\n logIt: ",logIt,
+            "\n Tick Value: ",MarketInfo(nomIndice,MODE_TICKVALUE),
+
             
 //            "\n +-----------------------------   ",
 //            "\n BUY Conditions   : ",buyConditions[0],buyConditions[1],
