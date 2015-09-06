@@ -25,8 +25,8 @@ extern string COMMENT = "HA";
 extern double POWER = 20; //default per GER30 con 8.000 euro
 extern bool usePercentageRisk = false;
 extern string info_p = "Se usePercentageRisk = true: POWER è la % equity da rishiare ad ogni trade. Altrimenti POWER = Lotti per ordine.";
-extern int startingHour = 6; //orario di apertura da cui iniziare a verificare  massimi e minimi ed orario di inizio validità tecnica normalmente è una o due ore più indietro del nostro.
-extern int endingHour = 17; //orario di fine attività per questo strumento. Probabilmente sarà da tarare.
+extern string startingHour = "6:00"; //orario di apertura da cui iniziare a verificare  massimi e minimi ed orario di inizio validità tecnica normalmente è una o due ore più indietro del nostro.
+extern string endingHour = "17:00"; //orario di fine attività per questo strumento. Probabilmente sarà da tarare.
 
 extern double TP_Multiplier = 1; // imposta il rapporto rischio/rendimento. da 1:1 in su su TUTTI gli ordini
 extern double TP_Paolone_Multiplier = 3; // moltiplicatore degli ordini dalla parte giusta della media di bollinger
@@ -81,7 +81,6 @@ double p; //order size
 
 //variabili per determinare il dateTime esatto della barra di apertura di oggi.
 datetime tm, startTime, endTime;
-MqlDateTime stm;
 
 double tollerance; // tolleranza in pip della distanza dai massimi e minimi per entrare sui reverse
 
@@ -96,6 +95,7 @@ bool sellConditions[20];
 double atr, ARC, maxSAR, minSAR;   
 
 
+datetime lastAnalizedBarTime; //per eseguire alcuni controlli una sola volta per barra: inizializzato in init
 
 
 //+--------------- Include ------------------------+
@@ -201,6 +201,8 @@ int init()
 
      }
 
+   // inizializzo lastAnalizedBarTime facendo finta che l'ultima barra analizzata sia la penultima
+   lastAnalizedBarTime = Time[1];
 
 //----
 
@@ -227,8 +229,9 @@ int deinit()
    ObjectDelete(ChartID(),"maxRangeBox");
    ObjectDelete(ChartID(),"minRangeBox");
 
-   //ObjectDelete(ChartID(),"bot_image_label");
 
+   // cambio lastAnalizedBarTime per essere sicuro che se rilanciato non consideri questa barra già analizzata
+   lastAnalizedBarTime = Time[1];
 
 //----
 
@@ -275,7 +278,7 @@ int paramD1()
 
 { 
 
-   int startBarOffset, highestBarShift, lowestBarShift, h;   
+   int startBarOffset, highestBarShift, lowestBarShift;   
 
    entreeBuy  = false;
    
@@ -289,13 +292,9 @@ int paramD1()
    // ===============================================================================
    tm = TimeCurrent();
    
-   TimeToStruct(tm,stm);
-   
-   stm.hour = startingHour;   stm.min = 0;   stm.sec = 0;
-   startTime = StructToTime(stm);
-
-   stm.hour = endingHour;   stm.min = 0;   stm.sec = 0;
-   endTime = StructToTime(stm);
+   /* === nuovo sistema di determinazione orari di trading ===== */
+   startTime = StrToTime(startingHour);
+   endTime = StrToTime(endingHour);
    
    startBarOffset = iBarShift(nomIndice,0,startTime,false) + 1; //offset della barra di inizio giornata
    
@@ -313,7 +312,7 @@ int paramD1()
    tollerance = iATR(nomIndice,0,100,0)/3*2;
    
    
-   if (Volume[0] == 1)
+   if (iBarShift(nomIndice,0,lastAnalizedBarTime,false) > 0 ) //(Volume[0] == 1)
    {
       
       // Determino massimi e minimi di oggi per trovare i punti di inversione
@@ -335,10 +334,11 @@ int paramD1()
       //aggiorno i rettangoli che partono dalle barre maggiore e minore ed arrivano ad ora
       ObjectSet("minRangeBox",OBJPROP_TIME1,iTime(nomIndice,0,lowestBarShift)); ObjectSet("minRangeBox",OBJPROP_PRICE1,min); //max
       ObjectSet("minRangeBox",OBJPROP_TIME2,TimeCurrent()); ObjectSet("minRangeBox",OBJPROP_PRICE2,min+tollerance); //max
-   }
-   
 
-   h = Hour(); // ora attuale
+      //aggiorno lastAnalizedBarTime in modo che fino alla prossima barra tutto questo non venga eseguito
+      lastAnalizedBarTime = Time[0];
+      
+   }
    
 
 // ------------------ Attribuzione Haiken Ashi --------------------
@@ -359,7 +359,7 @@ int paramD1()
 //-----------------enter buy order---------------------------+
 
    // buyConditions array
-   if ((startingHour <= h) && (h < endingHour))                buyConditions[0] = true;
+   if ((startTime <= tm) && (tm < endTime))                buyConditions[0] = true;
    if (haClose[1] > haOpen[1])                                 buyConditions[1] = true; //la barra HA precedente è BULL
    if (MathAbs(haClose[1]-haOpen[1]) > 1*Point)                buyConditions[2] = true; //la barra precedente ha + di 1 punto tra apertura e chiusura
    if ((haClose[2] < haOpen[2]) && (haClose[3] < haOpen[3]))   buyConditions[3] = true; //le due barre precedenti a quella sono entrambe BEAR
@@ -440,7 +440,7 @@ for(int pos=0;pos<OrdersTotal();pos++)
 
 //-----------------enter sell order----------------------------+
    // sellConditions array
-   if ((startingHour <= h) && (h < endingHour))                sellConditions[0] = true; 
+   if ((startTime <= tm) && (tm < endTime))                sellConditions[0] = true; 
    if (haClose[1] < haOpen[1])                                 sellConditions[1] = true; //la barra HA precedente è BEAR
    if (MathAbs(haClose[1]-haOpen[1]) > 1*Point)                sellConditions[2] = true; //la barra precedente ha + di 1 punto tra apertura e chiusura
    if ((haClose[2] > haOpen[2]) && (haClose[3] > haOpen[3]))   sellConditions[3] = true; //le due barre precedenti a quella sono entrambe BULL
