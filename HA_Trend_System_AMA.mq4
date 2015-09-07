@@ -235,6 +235,11 @@ int deinit()
    ObjectDelete(ChartID(),"maxRangeBox");
    ObjectDelete(ChartID(),"minRangeBox");
 
+   //Elimino i l'immagine ed il background box
+   ObjectDelete(ChartID(),"bot_image_label");
+   ObjectDelete(ChartID(),"bot_info_box");
+
+
    // cambio lastAnalizedBarTime per essere sicuro che se rilanciato non consideri questa barra già analizzata
    lastAnalizedBarTime = Time[1];
 
@@ -1035,13 +1040,8 @@ int commentaire()
 
    {
 
-   string dj;
+//   int dj = TimeCurrent();
 
- 
-
-   dj = Day()+ " / " + Month() + "   " + Hour() + " : " + Minute()+ " : " + Seconds();
-
- 
 
     Comment( "\n ","\n ","\n ","\n ",
             "\n ",bot_name, ": ",nomIndice,
@@ -1072,12 +1072,13 @@ int commentaire()
 
 //            "\n iTime[0]: ",iTime(nomIndice,0,0),//iBarShift(nomIndice,0,lastAnalizedBarTime,false), //logIt,
 //            "\n lastAnalizedBarTime: ",lastAnalizedBarTime,//iBarShift(nomIndice,0,lastAnalizedBarTime,false), //logIt,
-//            "\n timeCurrent: ",TimeToString(TimeCurrent(),TIME_MINUTES),//iBarShift(nomIndice,0,lastAnalizedBarTime,false), //logIt,
+//            "\n dj: ",dj,//TimeToString(TimeCurrent(),TIME_MINUTES),//iBarShift(nomIndice,0,lastAnalizedBarTime,false), //logIt,
+//            "\n timeCurrent: ",TimeToString(dj,TIME_MINUTES),
             
-            "\n +-----------------------------   ",
-            "\n BUY Conditions   : ",buyConditions[0],buyConditions[1],buyConditions[2],buyConditions[3],buyConditions[5],buyConditions[6],buyConditions[7],buyConditions[8],buyConditions[9],buyConditions[10],
+//            "\n +-----------------------------   ",
+//            "\n BUY Conditions   : ",buyConditions[0],buyConditions[1],buyConditions[2],buyConditions[3],buyConditions[5],buyConditions[6],buyConditions[7],buyConditions[8],buyConditions[9],buyConditions[10],
 //            "\n SELL Conditions  : ",sellConditions[0],sellConditions[1],
-            "\n +-----------------------------   ",
+//            "\n +-----------------------------   ",
 
 
             "");

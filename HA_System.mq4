@@ -229,6 +229,10 @@ int deinit()
    ObjectDelete(ChartID(),"maxRangeBox");
    ObjectDelete(ChartID(),"minRangeBox");
 
+   //Elimino i l'immagine ed il background box
+   ObjectDelete(ChartID(),"bot_image_label");
+   ObjectDelete(ChartID(),"bot_info_box");
+
 
    // cambio lastAnalizedBarTime per essere sicuro che se rilanciato non consideri questa barra già analizzata
    lastAnalizedBarTime = Time[1];
