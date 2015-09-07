@@ -71,21 +71,53 @@ int initY3_POWER_LIB(string fileName, int magic, int maPeriod=3, bool enable=tru
 
 int initOrderHistory(string s){
 
-   Print("Ordini presenti nella history: ",OrdersHistoryTotal());
-   for (int i=0;i<ArraySize(historicPips);i++)
-      {Print("Value in historicPips array ["+i+"]: "+historicPips[i]);}
+
+
+   // gli ordini nella history sono ordinati per data di apertura (o per orderticket?) e non per data di chiusura.
+   // a me servono ordinati per data di chiusura, quindi li prendo e li metto in un array per ordinarli
+   // poi uso questo array per estrarre gli ordini nell'ordine corretto
+
+   // array con  OrderCloseTime() e OrderTicket()
+   // la prima dimensione è la data di chiusura perchè si può usare solo quella per sortare l'array
+   int orderList[][2]; // OrderCloseTime(), OrderTicket()
    
-   //loop history and get orders of this robot
-   for (i=0; i<OrdersHistoryTotal(); i++) 
+   // inserisco gli ordini di questo robot nell'array orderList
+   for (int i=0; i<OrdersHistoryTotal(); i++) 
    {
       if ( (OrderSelect(i,SELECT_BY_POS,MODE_HISTORY)==true) && (OrderMagicNumber()==s) && (OrderSymbol()==nomIndice) )
       {
-         //aggiungo questo ordine all'array ed al file
-         addOrderToHistory(OrderTicket());
-         //Print("Aggiunto un ordine all'array, ticket: ",OrderTicket() );
+         
+         //prendo la dimensione attuale dell'array
+         int k = ArrayRange(orderList,0);
+                  
+         //aumento lo spazio nell'array di uno
+         ArrayResize(orderList,k+1,100000);
+         
+         //metto i dati di questo ordine nell'array
+         orderList[k][0] = OrderCloseTime();
+         orderList[k][1] = OrderTicket();
+         
+         Print("orderList: size:"+k+", OrderCloseTime:"+ orderList[k][0] +", OrderTicket:"+orderList[k][1]);
+         
       }
    
    }
+
+
+   // poi ordino l'array orderList[],[] dall'ordine più vecchio a quello più recente
+   ArraySort(orderList,WHOLE_ARRAY,0,MODE_ASCEND);
+   
+   
+   //inserisco gli ordini nella history
+   for (i=0; i<ArrayRange(orderList,0); i++) 
+   {
+      Print("Aggiunto un ordine all'array, i: ",i," ticket:",orderList[i][1] );  
+      //aggiungo questo ordine alla history ed al file
+      addOrderToHistory(orderList[i][1]);
+      //Print("Aggiunto un ordine all'array, i: ",i );  
+   }
+
+   
    return(0);   
    
 }
@@ -120,9 +152,11 @@ int addOrderToHistory(int ticket){
    else
       {Print("addOrderToHistory Error: ",GetLastError());}
 
-   
-   historicPips[k] = historicPips[k-1]+pips;
-   
+   if (k>0)
+    historicPips[k] = historicPips[k-1]+pips;
+   else
+    historicPips[k] = pips;
+    
    //Print("addOrderToHistory: historicPips["+k+"]"+historicPips[k]);
    
 
