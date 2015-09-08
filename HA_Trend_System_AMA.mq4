@@ -22,24 +22,28 @@ string nomIndice = "GER30"; //sovrascritto dopo in init()
 //--------number of lots to trade--------------+
 extern int SIGNATURE = 0018100;
 extern string COMMENT = "HA_T";
-extern double POWER = 20; //default per GER30 con 8.000 euro
-extern bool usePercentageRisk = false;
+extern double POWER = 20; //POWER: 20 per GER30 con 8.000 euro
+extern bool usePercentageRisk = false; 
 extern string info_p = "Se usePercentageRisk = true: POWER è la % equity da rishiare ad ogni trade. Altrimenti POWER = Lotti per ordine.";
-extern string startingHour = "6:00"; //orario di apertura da cui iniziare a verificare  massimi e minimi ed orario di inizio validità tecnica normalmente è una o due ore più indietro del nostro.
-extern string endingHour = "17:00"; //orario di fine attività per questo strumento. Probabilmente sarà da tarare.
+extern string startingHour = "6:00"; //startingHour: orario inizio attività
+extern string endingHour = "17:00"; //endingHour: orario di fine attività 
 
-extern double TP_Multiplier = 1; // imposta il rapporto rischio/rendimento. da 1:1 in su su TUTTI gli ordini
-extern double TP_Paolone_Multiplier = 3; // moltiplicatore degli ordini dalla parte giusta della media di bollinger
-extern int numberOfOrders = 1; //usato per decidere quanti ordini aprire per ogni posizione. Moltiplica anche la distanza del TP (x1, x2, x3 etc)
-extern int SL_added_pips = 2; // distanza in pip da aggiungere allo SL. Lo SL è uguale al massimo(minimo) della barra precedente + questo numero di pips. Così è gestibile per ogni strumento.
+double TP_Multiplier = 1; // imposta il rapporto rischio/rendimento. da 1:1 in su su TUTTI gli ordini
+extern double TP_Paolone_Multiplier = 3; //TP_Paolone_Multiplier: def 3
+int numberOfOrders = 1; //usato per decidere quanti ordini aprire per ogni posizione. Moltiplica anche la distanza del TP (x1, x2, x3 etc)
+extern int SL_added_pips = 2; // SL_added_pips: pip da aggiungere allo SL
 
-extern string nameOfHistoryFile = "HA_Trend_System_AMA_HST_";
+extern string nameOfHistoryFile = "HA_Trend_System_AMA_HST_"; 
 extern int Y3_POWER_LIB_maPeriod = 5;
 
 extern string Trend = "=== Media mobile trend ===";
 extern int maFilterPeriod = 9;
 extern int AMAnFast = 2;
 extern bool enableAdaptive_AMA = false;
+
+extern string wsSettings = "=== Web Server ===";
+extern bool registerBars = true; //registerBars: registra le barre sul web server
+
 
 string bot_name = "HA Trend AMA System";
 
@@ -101,18 +105,14 @@ bool sellConditions[20];
 double atr, ARC, maxSAR, minSAR, maFilter;   
 
 datetime lastAnalizedBarTime; //per eseguire alcuni controlli una sola volta per barra: inizializzato in init
-
+bool webBarDataSendedToServer; // gestisce se inviare o no i dati iniziali di una barra al webServer
+string webRequestBody; // contiene il messaggio da inviare al web server
 
 //+--------------- Include ------------------------+
 
-#include  "Y3_POWER_LIB.mqh"
+#include    "Y3_POWER_LIB.mqh"
+#include    "WebRequest.mqh"
 
-// ------ esperimenti col messagebox -------
-//#import "user32.dll"
-//   int MessageBoxA(int Ignore, string Caption, string Title, int Icon);
-//#import
-//#include <WinUser32.mqh>
-// --------- fine esperimenti ------------------
 //+----------------------- end --------------------+
 
  
@@ -127,6 +127,7 @@ int init()
 
   {
 
+
    //metto il simbolo attuale nella variabile, per poter utilizzare il programma su ogni simbolo
    nomIndice = Symbol();
    
@@ -136,13 +137,13 @@ int init()
    
    //Creo i rettangoli usato per la visualizzazione dei massimi e quello per i minimi
    if (ObjectCreate(NULL,"maxRangeBox",OBJ_RECTANGLE,0,0,0,0,0) == false) 
-      Alert("Errore nella creazione di maxRangeBox: "+GetLastError());
+      Alert("Errore nella creazione di maxRangeBox: "+(string)GetLastError());
    else
       ObjectSet("maxRangeBox",OBJPROP_COLOR,DodgerBlue);
       
 
    if (ObjectCreate(NULL,"minRangeBox",OBJ_RECTANGLE,0,0,0,0,0) == false) 
-      Alert("Errore nella creazione di minRangeBox: "+GetLastError());
+      Alert("Errore nella creazione di minRangeBox: "+(string)GetLastError());
    else
       ObjectSet("minRangeBox",OBJPROP_COLOR,Maroon);
    
@@ -208,7 +209,9 @@ int init()
 
    // inizializzo lastAnalizedBarTime facendo finta che l'ultima barra analizzata sia la penultima
    lastAnalizedBarTime = Time[1];
-
+   
+   // per registrare i dati iniziali di questa barra
+   webBarDataSendedToServer = false; 
    
 //----
 
@@ -243,6 +246,9 @@ int deinit()
    // cambio lastAnalizedBarTime per essere sicuro che se rilanciato non consideri questa barra già analizzata
    lastAnalizedBarTime = Time[1];
 
+   // per registrare i dati iniziali di questa barra
+   webBarDataSendedToServer = false; 
+
 //----
 
    return(0);
@@ -265,11 +271,7 @@ int start()
 
    ouvertureBuy();
 
-//   fermetureBuy();
-
    ouvertureSell();
-
-//   fermetureSell();
 
    commentaire();
 //----
@@ -321,7 +323,10 @@ int paramD1()
    tollerance = iATR(nomIndice,0,100,0)/3*2;
 
 
-   if (iBarShift(nomIndice,0,lastAnalizedBarTime,false) > 0 ) //(Volume[0] == 1)
+   //-------------------------------------------------------+
+   // controlli da effettuare una sola volta per ogni barra |
+   //-------------------------------------------------------+
+   if (iBarShift(nomIndice,0,lastAnalizedBarTime,false) > 0 ) 
    {
    
 
@@ -349,6 +354,9 @@ int paramD1()
       
       //aggiorno lastAnalizedBarTime in modo che fino alla prossima barra tutto questo non venga eseguito
       lastAnalizedBarTime = Time[0];
+
+      // dico al bot che deve ancora spedire i dati iniziali di questa barra al webServer
+      webBarDataSendedToServer = false; 
       
    }
 
@@ -378,7 +386,7 @@ int paramD1()
 //-----------------enter buy order---------------------------+
 
    // buyConditions array
-   if ((startTime <= tm) && (tm < endTime))                buyConditions[0] = true;
+   if ((startTime <= tm) && (tm < endTime))                    buyConditions[0] = true;
    if (haClose[1] > haOpen[1])                                 buyConditions[1] = true; //la barra HA precedente è BULL
    if (MathAbs(haClose[1]-haOpen[1]) > 1*Point)                buyConditions[2] = true; //la barra precedente ha + di 1 punto tra apertura e chiusura
    if ((haClose[2] < haOpen[2]) && (haClose[3] < haOpen[3]))   buyConditions[3] = true; //le due barre precedenti a quella sono entrambe BEAR
@@ -390,8 +398,12 @@ int paramD1()
    if (!existOrderOnThisBar(0))                                buyConditions[9] = true; // se NON ho un ordine già aperto in questa barra (apre un solo ordine per ogni direzione)
    // segnale con bug
    if (MarketInfo(nomIndice,MODE_BID) > maFilter)              buyConditions[10] = true; // il prezzo è sopra alla media mobile
+   
    // è il segnale che deve essere sopra la media, non il prezzo attule!
    //if (Close[1] > maFilter)              buyConditions[10] = true; // il prezzo è sopra alla media mobile
+   
+   
+   
    
    if(   //(Volume[0] == 1) &&
        (buyConditions[0]) 
@@ -502,7 +514,7 @@ for(int pos=0;pos<OrdersTotal();pos++)
 
 
 //scorrere gli ordini per vedere se uno va chiuso
-for(pos=0;pos<OrdersTotal();pos++)
+for(int pos=0;pos<OrdersTotal();pos++)
     {
      if( (OrderSelect(pos,SELECT_BY_POS)==false)
      || (OrderSymbol() != nomIndice)
@@ -525,6 +537,38 @@ for(pos=0;pos<OrdersTotal();pos++)
 
     }
    
+
+
+
+   //-------------------------------------------------------+
+   // scrivo sul webserver i dati iniziali di questa barra  |
+   //-------------------------------------------------------+
+   if ((webBarDataSendedToServer == false) && (registerBars == true))
+   {
+      webRequestBody = 
+      "accountID="            +(string)AccountNumber()+
+      "&symbol="              +(string)nomIndice+
+      "&barOpenTime="         +TimeYear(Time[0])+"-"+TimeMonth(Time[0])+"-"+TimeDay(Time[0])+"+"+TimeHour(Time[0])+"%3A"+TimeMinute(Time[0])+"%3A"+TimeSeconds(Time[0])+
+      "&barRegistrationTime=" +TimeYear(TimeCurrent())+"-"+TimeMonth(TimeCurrent())+"-"+TimeDay(TimeCurrent())+"+"+TimeHour(TimeCurrent())+"%3A"+TimeMinute(TimeCurrent())+"%3A"+TimeSeconds(TimeCurrent())+
+      "&systemName="          +bot_name+
+      "&systemMagic="         +SIGNATURE+
+      "&startingAsk="         +(string)MarketInfo(nomIndice,MODE_ASK)+
+      "&startingBid="         +(string)MarketInfo(nomIndice,MODE_BID)+
+      
+      // aggiungere le informazioni di partenza se necessario
+      "&startingInfo="        +"Buy+Conditions: 0 "+buyConditions[0]+" - 1 "+buyConditions[1]+" - 2 "+buyConditions[2]+" - 3 "+buyConditions[3]+" - 5 "+buyConditions[5]+" - 6 "+buyConditions[6]+" - 7 "+buyConditions[7]+" - 8 "+buyConditions[8]+" - 9 "+buyConditions[9]+" - 10 "+buyConditions[10]+"; "+
+      "Sell+Conditions: 0 "     +sellConditions[0]+" - 1 "+sellConditions[1]+" - 2 "+sellConditions[2]+" - 3 "+sellConditions[3]+" - 5 "+sellConditions[5]+" - 6 "+sellConditions[6]+" - 7 "+sellConditions[7]+" - 8 "+sellConditions[8]+" - 9 "+sellConditions[9]+" - 10 "+sellConditions[10]+"; "+
+      "TP_Paolone: "          +autoTargetMultiplier(TP_Paolone_Multiplier)+";"
+      ;
+      
+      // invio la richiesta al webServer
+      webBarDataSendedToServer = sendRequest("http://www.y3web.it/addNewBar.asp",webRequestBody);
+      
+   }
+   
+   
+   
+
 
 //-----------------end---------------------------------------------+
 

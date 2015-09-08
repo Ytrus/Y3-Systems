@@ -109,7 +109,7 @@ int initOrderHistory(string s){
    
    
    //inserisco gli ordini nella history
-   for (i=0; i<ArrayRange(orderList,0); i++) 
+   for (int i=0; i<ArrayRange(orderList,0); i++) 
    {
       Print("Aggiunto un ordine all'array, i: ",i," ticket:",orderList[i][1] );  
       //aggiungo questo ordine alla history ed al file
