@@ -10,16 +10,29 @@
 //| Web Request functions                                                 |
 //+------------------------------------------------------------------+
 
-bool sendRequest(string destinationURL,string dataString)
+string webRequestBody; // variabile usata per contenere il messaggio da inviare al web server. Dichiarata qui così è disponibile in tutti i BOT includendo questo file
+int webRequestAttempts = 0;
+
+bool sendRequest(string destinationURL,string dataString, int maxAttempts = 3)
    {
    
-   
+      
+      //---------------------------------------------------------+
+      // per evitare centinaia di tentativi, in caso di errore   |
+      //---------------------------------------------------------+
+      if (webRequestAttempts >= maxAttempts) 
+      {
+         /* TODO:
+         inserire qui il codice di invio email per segnalazione, se necessario; */ 
+         return false;
+      }
+      
       int res; // risultato della chiamata WebRequest
       string header, responseHeader;
       char data[], responseData[];
       
       // imposto l'header da mandare alla pagina web
-      header="Content-Type: Content-Type: application/x-www-form-urlencoded \r\n";
+      header="Content-Type: application/x-www-form-urlencoded \r\n";
       
         
       // trasformo la stringa in un array char
@@ -32,7 +45,7 @@ bool sendRequest(string destinationURL,string dataString)
      
       //gestisco la risposta
       if (res == -1) // la chiamata non è stata fatta: forse si deve aggiungere l'indirizzo web a quelli consentiti
-         {Alert("Attenzione: impossibile inviare i dati al server web. Aggiungere 'http://www.y3web.it/forexDataSaver.asp' ai consentiti"); return false;}
+         {Alert("Attenzione: impossibile inviare i dati al server web. Aggiungere "+ destinationURL +" ai consentiti"); return false;}
       else
       {
          
@@ -46,14 +59,14 @@ bool sendRequest(string destinationURL,string dataString)
                        
             // se la risposta del server contiene 'OK' la registrazione è andata a buon fine
             if (StringFind(responseBody,"OK",0) != -1 )
-               {Print("Dati inviati al server web. Risposta: "+responseBody); return true;}
+               {Print("Dati inviati al server web. Risposta: "+responseBody); webRequestAttempts = 0; return true;}
             
             //altrimenti il server ha risposto con l'errore incontrato (solitamente mancanza o incompatibilità dei dati
             else
-               {Print("Dati inviati al server web con ERRORE. Risposta: "+responseBody); return false;}
+               {Print("Dati inviati al server web con ERRORE. Risposta: "+responseBody); webRequestAttempts+=1; return false;}
           }
 
          else
-            {Alert("Errore durante l'invio dei dati al server web. Risposta: "+responseBody); return false;}
+            {Alert("Errore durante l'invio dei dati al server web. Risposta: "+responseBody); webRequestAttempts+=1; return false;}
       }
    }
