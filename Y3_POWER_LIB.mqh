@@ -58,10 +58,10 @@ int initY3_POWER_LIB(string fileName, int magic, int maPeriod=3, bool enable=tru
    enableLibrary = enable;
    
    //enable Adaptive maPeriod
-   enableAdaptive = adaptive; Print("initY3_POWER_LIB: enableAdaptive = "+adaptive);
+   enableAdaptive = adaptive; //Print("initY3_POWER_LIB: enableAdaptive = "+adaptive);
 
    //initialize history
-   initOrderHistory(magic);
+   initOrderHistory((string)magic);
    
    return(0);
 
@@ -84,7 +84,7 @@ int initOrderHistory(string s){
    // inserisco gli ordini di questo robot nell'array orderList
    for (int i=0; i<OrdersHistoryTotal(); i++) 
    {
-      if ( (OrderSelect(i,SELECT_BY_POS,MODE_HISTORY)==true) && (OrderMagicNumber()==s) && (OrderSymbol()==nomIndice) )
+      if ( (OrderSelect(i,SELECT_BY_POS,MODE_HISTORY)==true) && ((string)OrderMagicNumber()==s) && ((string)OrderSymbol()==nomIndice) )
       {
          
          //prendo la dimensione attuale dell'array
@@ -97,7 +97,7 @@ int initOrderHistory(string s){
          orderList[k][0] = OrderCloseTime();
          orderList[k][1] = OrderTicket();
          
-         Print("orderList: size:"+k+", OrderCloseTime:"+ orderList[k][0] +", OrderTicket:"+orderList[k][1]);
+         //Print("orderList: size:"+(string)k+", OrderCloseTime:"+ (string)orderList[k][0] +", OrderTicket:"+(string)orderList[k][1]);
          
       }
    
@@ -105,7 +105,7 @@ int initOrderHistory(string s){
 
 
    // poi ordino l'array orderList[],[] dall'ordine più vecchio a quello più recente
-   ArraySort(orderList,WHOLE_ARRAY,0,MODE_ASCEND);
+   if (ArrayRange(orderList,0) > 0) ArraySort(orderList,WHOLE_ARRAY,0,MODE_ASCEND);
    
    
    //inserisco gli ordini nella history
@@ -311,7 +311,7 @@ int addOrderToHistory(int ticket){
    ArraySetAsSeries(historicPipsMA, false);
    
    //scrivo su un file i pips, la media e il numero di lotti per verificare con excel
-   addToFile(HistoryFileName, ticket, k, pips, historicPips[k], macurrent, adaptive_maPeriod, orderSize );
+   addToFile(HistoryFileName, (string)ticket, k, pips, historicPips[k], macurrent, adaptive_maPeriod, orderSize );
 
 
    return(0);
@@ -323,13 +323,17 @@ int addOrderToHistory(int ticket){
 // ---------------- SET POWER --------------------+
 double setPower(double originalPower){
 
+
+   // se non ho dati nell'array historicPipsMA, restituisco originalPower
+   if (ArraySize(historicPipsMA) == 0) return(originalPower);
+   
    //prepare the array as timeSeries
    ArraySetAsSeries(historicPips, true);
    ArraySetAsSeries(historicPipsMA, true);
 
    
    //calculate the moving averages on earned pips
-   macurrent = historicPipsMA[0]; //macurrent=iMAOnArray(historicPips,0,adaptive_maPeriod,0,MODE_SMA,0);
+   macurrent = historicPipsMA[0];
    
    //Print("setPower - pips: ",historicPips[0], " - iMA: ",macurrent);
    
@@ -372,7 +376,7 @@ int addToFile(string fileName, string ticket, int k, int orderpips, int pips, do
       if (FileSeek(file_handle,0,SEEK_END)==true)
       {
          //--- write values to the file
-         FileWrite(file_handle,ticket,"k="+k,orderpips,pips,MathRound(ma),maPeriod,lots);
+         FileWrite(file_handle,ticket,"k="+(string)k,orderpips,pips,MathRound(ma),maPeriod,lots);
          PrintFormat("Data is written, %s file is closed",fileName);
       }
       //--- close the file
@@ -507,13 +511,13 @@ int getMaFilter(int maxMaValue){
       // se i == k sono nell'ultimo trade disponibile, il primo trade presente nello storico.
       // quindi devo usare il suo valore per sapere se era vincente o perdente
       if (i==k)
-         { if (historicPips[i-1] < 0) result = result + sub; logIt = logIt + ""+i+". "+ result + " ||    ";}
+         { if (historicPips[i-1] < 0) result = result + sub; logIt = logIt + ""+(string)i+". "+ (string)result + " ||    ";}
       
       //altrimenti per saperlo devo sottrarlo al valore precedente
       else 
          {
             if (historicPips[i-1] - historicPips[i] < 0) { result = result + sub; }
-            logIt = logIt + ""+ i+". "+ result + "  ||    ";
+            logIt = logIt + ""+ (string)i+". "+ (string)result + "  ||    ";
          }
       // ========== Versione esclusiva per VER. 6 ==============================
       
