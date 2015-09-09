@@ -44,6 +44,9 @@ extern bool enableAdaptive_AMA = false;
 extern string wsSettings = "=== Web Server ===";
 extern bool registerBars = true; //registerBars: registra le barre sul web server
 
+extern string emailSettings = "=== email Settings ===";
+extern bool sendEmailOnOrderOpen = true; //Manda una mail quando apre un ordine
+extern bool sendEmailOnOrderClose = true; //Manda una mail quando chiude un ordine
 
 string bot_name = "HA Trend AMA System";
 
@@ -79,7 +82,7 @@ int ticketSell;
 double p; //order size
 
 
-// imposto delle variabili per prendere apertura, chiusura, massimo e minimo dell'hHaiken_Ashi
+// imposto delle variabili per prendere apertura, chiusura, massimo e minimo dell'Haiken_Ashi
 //--- the number of indicator buffer for storage Open
 #define  HA_OPEN     2
 //--- the number of the indicator buffer for storage High
@@ -106,7 +109,6 @@ double atr, ARC, maxSAR, minSAR, maFilter;
 
 datetime lastAnalizedBarTime; //per eseguire alcuni controlli una sola volta per barra: inizializzato in init
 bool webBarDataSendedToServer; // gestisce se inviare o no i dati iniziali di una barra al webServer
-string webRequestBody; // contiene il messaggio da inviare al web server
 
 //+--------------- Include ------------------------+
 
@@ -213,6 +215,16 @@ int init()
    // per registrare i dati iniziali di questa barra
    webBarDataSendedToServer = false; 
    
+   //-------------------------------------------------+
+   // Disabilito le funzionalità assenti in testing   |
+   //-------------------------------------------------+
+   if (IsTesting())
+   {
+         registerBars = false;               // non tentare di registrare le barre sul web Server
+         sendEmailOnOrderOpen = false;       // non tentare di inviare email all'apertura di un ordine
+         sendEmailOnOrderClose = false;      // non tentare di invare email alla chiusura di un ordine
+   }
+   
 //----
 
    return(0);
@@ -274,6 +286,7 @@ int start()
    ouvertureSell();
 
    commentaire();
+
 //----
 
    return(0);
@@ -321,6 +334,7 @@ int paramD1()
    // la distanza accettabile dai massimi e minimi del giorno per entrare la ricavo dall'ATR 14.
    // le posizioni long potranno aver raggiunto un prezzo superiore al minimo di giornata pari alla grandezza di tollerance.
    tollerance = iATR(nomIndice,0,100,0)/3*2;
+   tollerance = NormalizeDouble(tollerance, Digits);
 
 
    //-------------------------------------------------------+
@@ -382,15 +396,16 @@ int paramD1()
    //maFilter = iMA(nomIndice,0,getMaFilter(maFilterPeriod),0,MODE_EMA,PRICE_TYPICAL,0);
    //tentiamo l'utilizzo della AMA per filtrare i segnali
    maFilter = iCustom(nomIndice,0,"Downloads\\AMA", getMaFilter(maFilterPeriod),AMAnFast,30,2,2, 0,1); //il periodo dell'ama viene gestito da getMaFilter
+   maFilter = NormalizeDouble(maFilter,Digits);
    
 //-----------------enter buy order---------------------------+
 
    // buyConditions array
-   if ((startTime <= tm) && (tm < endTime))                    buyConditions[0] = true;
-   if (haClose[1] > haOpen[1])                                 buyConditions[1] = true; //la barra HA precedente è BULL
-   if (MathAbs(haClose[1]-haOpen[1]) > 1*Point)                buyConditions[2] = true; //la barra precedente ha + di 1 punto tra apertura e chiusura
-   if ((haClose[2] < haOpen[2]) && (haClose[3] < haOpen[3]))   buyConditions[3] = true; //le due barre precedenti a quella sono entrambe BEAR
-   if (nearestMin < min+tollerance)                            buyConditions[4] = true; //il minimo delle ultime 3 barre era vicino al minimo assoluto della giornata
+   if ((startTime <= tm) && (tm < endTime))                    buyConditions[0] = true; // orario di trading
+   if (haClose[1] > haOpen[1])                                 buyConditions[1] = true; // la barra HA precedente è BULL
+   if (MathAbs(haClose[1]-haOpen[1]) > 1*Point)                buyConditions[2] = true; // la barra precedente ha + di 1 punto tra apertura e chiusura
+   if ((haClose[2] < haOpen[2]) && (haClose[3] < haOpen[3]))   buyConditions[3] = true; // le due barre precedenti a quella sono entrambe BEAR
+   if (nearestMin < min+tollerance)                            buyConditions[4] = true; // il minimo delle ultime 3 barre era vicino al minimo assoluto della giornata
    if (MarketInfo(nomIndice,MODE_BID) >= min)                  buyConditions[5] = true; // se il prezzo sta scendendo non devo rientrare (mi ha già buttato fuori quando ho toccato min)
    if (MarketInfo(nomIndice,MODE_BID) < upperband)             buyConditions[6] = true; // non devo essere oltre la banda superiore
    if (!existOpendedAndClosedOnThisBar(2))                     buyConditions[7] = true; // Se non ho 2 ordini aperti e chiusi in questa barra
@@ -473,8 +488,7 @@ for(int pos=0;pos<OrdersTotal();pos++)
 
 //-----------------enter sell order----------------------------+
    // sellConditions array
-   if ((startTime <= tm) && (tm < endTime))                sellConditions[0] = true; 
-   //if ((startingHour <= h) && (h < endingHour))                sellConditions[0] = true; 
+   if ((startTime <= tm) && (tm < endTime))                    sellConditions[0] = true; 
    if (haClose[1] < haOpen[1])                                 sellConditions[1] = true; //la barra HA precedente è BEAR
    if (MathAbs(haClose[1]-haOpen[1]) > 1*Point)                sellConditions[2] = true; //la barra precedente ha + di 1 punto tra apertura e chiusura
    if ((haClose[2] > haOpen[2]) && (haClose[3] > haOpen[3]))   sellConditions[3] = true; //le due barre precedenti a quella sono entrambe BULL
@@ -545,24 +559,33 @@ for(int pos=0;pos<OrdersTotal();pos++)
    //-------------------------------------------------------+
    if ((webBarDataSendedToServer == false) && (registerBars == true))
    {
+      // encoded strings
+      string bot_name_encoded = bot_name; StringReplace(bot_name_encoded, " ", "+");
+      
       webRequestBody = 
       "accountID="            +(string)AccountNumber()+
       "&symbol="              +(string)nomIndice+
-      "&barOpenTime="         +TimeYear(Time[0])+"-"+TimeMonth(Time[0])+"-"+TimeDay(Time[0])+"+"+TimeHour(Time[0])+"%3A"+TimeMinute(Time[0])+"%3A"+TimeSeconds(Time[0])+
-      "&barRegistrationTime=" +TimeYear(TimeCurrent())+"-"+TimeMonth(TimeCurrent())+"-"+TimeDay(TimeCurrent())+"+"+TimeHour(TimeCurrent())+"%3A"+TimeMinute(TimeCurrent())+"%3A"+TimeSeconds(TimeCurrent())+
-      "&systemName="          +bot_name+
-      "&systemMagic="         +SIGNATURE+
-      "&startingAsk="         +(string)MarketInfo(nomIndice,MODE_ASK)+
-      "&startingBid="         +(string)MarketInfo(nomIndice,MODE_BID)+
+      "&barOpenTime="         +(string)TimeYear(Time[0])+"-"+(string)TimeMonth(Time[0])+"-"+(string)TimeDay(Time[0])+"+"+(string)TimeHour(Time[0])+"%3A"+(string)TimeMinute(Time[0])+"%3A"+(string)TimeSeconds(Time[0])+
+      "&barRegistrationTime=" +(string)TimeYear(TimeCurrent())+"-"+(string)TimeMonth(TimeCurrent())+"-"+(string)TimeDay(TimeCurrent())+"+"+(string)TimeHour(TimeCurrent())+"%3A"+(string)TimeMinute(TimeCurrent())+"%3A"+(string)TimeSeconds(TimeCurrent())+
+      "&systemName="          +bot_name_encoded+
+      "&systemMagic="         +(string)SIGNATURE+
+      "&ask="                 +(string)MarketInfo(nomIndice,MODE_ASK)+
+      "&bid="                 +(string)MarketInfo(nomIndice,MODE_BID)+
       
       // aggiungere le informazioni di partenza se necessario
-      "&startingInfo="        +"Buy+Conditions: 0 "+buyConditions[0]+" - 1 "+buyConditions[1]+" - 2 "+buyConditions[2]+" - 3 "+buyConditions[3]+" - 5 "+buyConditions[5]+" - 6 "+buyConditions[6]+" - 7 "+buyConditions[7]+" - 8 "+buyConditions[8]+" - 9 "+buyConditions[9]+" - 10 "+buyConditions[10]+"; "+
-      "Sell+Conditions: 0 "     +sellConditions[0]+" - 1 "+sellConditions[1]+" - 2 "+sellConditions[2]+" - 3 "+sellConditions[3]+" - 5 "+sellConditions[5]+" - 6 "+sellConditions[6]+" - 7 "+sellConditions[7]+" - 8 "+sellConditions[8]+" - 9 "+sellConditions[9]+" - 10 "+sellConditions[10]+"; "+
-      "TP_Paolone: "          +autoTargetMultiplier(TP_Paolone_Multiplier)+";"
+      "&startingInfo="+
+      "Buy+Conditions:+0."    +(string)buyConditions[0]+"+1."+(string)buyConditions[1]+"+2."+(string)buyConditions[2]+"+3."+(string)buyConditions[3]+"+5."+(string)buyConditions[5]+"+6."+(string)buyConditions[6]+"+7."+(string)buyConditions[7]+"+8."+(string)buyConditions[8]+"+9."+(string)buyConditions[9]+"+10."+(string)buyConditions[10]+"; "+
+      "Sell+Conditions:+0."   +(string)sellConditions[0]+"+1."+(string)sellConditions[1]+"+2."+(string)sellConditions[2]+"+3."+(string)sellConditions[3]+"+5."+(string)sellConditions[5]+"+6."+(string)sellConditions[6]+"+7."+(string)sellConditions[7]+"+8."+(string)sellConditions[8]+"+9."+(string)sellConditions[9]+"+10."+(string)sellConditions[10]+"; "+
+      "nearestMin:+"          +(string)nearestMin+";+"+
+      "nearestMax:+"          +(string)nearestMax+";+"+
+      "min:+"                 +(string)min+";+"+
+      "max:+"                 +(string)max+";+"+
+      "tollerance:+"          +(string)tollerance+";+"+
+      "AMA("                  +(string)getMaFilter(maFilterPeriod)+ "," +(string)AMAnFast+ ")+Value:+" +(string)maFilter+";+" 
       ;
       
       // invio la richiesta al webServer
-      webBarDataSendedToServer = sendRequest("http://www.y3web.it/addNewBar.asp",webRequestBody);
+      webBarDataSendedToServer = sendRequest("http://www.y3web.it/addNewBar.asp",webRequestBody,3);
       
    }
    
@@ -609,10 +632,6 @@ int ouvertureBuy()
             {takeprofit = MarketInfo(nomIndice,MODE_ASK) + autoTargetMultiplier(TP_Paolone_Multiplier)*(MarketInfo(nomIndice,MODE_ASK) - stoploss) * orx * TP_Multiplier ;}
          else
             {takeprofit = MarketInfo(nomIndice,MODE_ASK) + (MarketInfo(nomIndice,MODE_ASK) - stoploss) * orx * TP_Multiplier ;}
-
-
-         //TP originale
-         //takeprofit = MarketInfo(nomIndice,MODE_ASK) + (MarketInfo(nomIndice,MODE_ASK) - stoploss) * orx * TP_Multiplier ; //High[1] + ((High[1] - stoploss) * orx * TP_Multiplier) ;
    
          stoploss   = NormalizeDouble(stoploss-1000*Point ,MarketInfo(nomIndice,MODE_DIGITS));
         
@@ -627,12 +646,28 @@ int ouvertureBuy()
          //------------------confirmation du passage ordre Buy-----------------+
    
          if(ticketBuy > 0) 
-            {if (orx == numberOfOrders) 
-               {tradeBuy = true; 
-                  bool mailRessult = SendMail("HA System ha aperto "+ orx +" posizioni BUY", "Strumento:"+ nomIndice +" -  "+ size);
-                  if (mailRessult == false) Print("Errore durante invio email BUY: "+ GetLastError());
+         {
+            if (orx == numberOfOrders) 
+            {
+               tradeBuy = true; 
+               
+               //------------------------------------------------------+
+               // Mando email per comunicare apertura dell'ordine      |
+               //------------------------------------------------------+
+               if (sendEmailOnOrderOpen == true)
+               {
+                  bool mailResult = SendMail(bot_name+" ha aperto "+ (string)orx +" posizioni BUY", "Strumento:"+ nomIndice +" -  "+ (string)size);
+                  if (mailResult == false) Print("Errore durante invio email BUY: "+ (string)GetLastError());
                }
+               
+               //------------------------------------------------------+
+               // Mando l'ordine al web Server per registrarlo         |
+               //------------------------------------------------------+               
+               
+               //toDo....
+               
             }
+         }
          else
             {orx--;}
       }
@@ -728,13 +763,28 @@ int ouvertureSell()
          //------------------confirmation du passage ordre Sell-----------------+
    
          if(ticketSell > 0)
-            {Print("Inserito ordine "+orx+" di "+numberOfOrders+".");
+         {
             if (orx == numberOfOrders) 
-               {tradeSell = true; 
-                  bool mailRessult = SendMail("HA System ha aperto "+ orx +" posizioni SELL", "Strumento:"+ nomIndice +" -  "+ size);
-                  if (mailRessult == false) Print("Errore durante invio email SELL: "+ GetLastError());
+            {
+               tradeSell = true; 
+               
+               //------------------------------------------------------+
+               // Mando email per comunicare apertura dell'ordine      |
+               //------------------------------------------------------+
+               if (sendEmailOnOrderOpen == true)
+               {
+                  bool mailResult = SendMail(bot_name+" ha aperto "+ (string)orx +" posizioni SELL", "Strumento:"+ nomIndice +" -  "+ (string)size);
+                  if (mailResult == false) Print("Errore durante invio email SELL: "+ (string)GetLastError());
                }
+               
+               //------------------------------------------------------+
+               // Mando l'ordine al web Server per registrarlo         |
+               //------------------------------------------------------+               
+               
+               //toDo....
+               
             }
+         }
          else
             {orx--; } //fallito inserimento, porto indietro il counter per riprovare
       }
@@ -747,7 +797,7 @@ int ouvertureSell()
 //-----------------end----------------------------------------+
 
 
-//-------------------Buy close-----------------------------------+
+//-------------------Sell close-----------------------------------+
 
 int fermetureSell(int tkt)
 
@@ -906,8 +956,14 @@ double autoTargetMultiplier(double maxMultiplier){
       
    }
    
+   maxMultiplier = NormalizeDouble(maxMultiplier, 2);
+   
    // mai minore di 1
    if (maxMultiplier < 1) maxMultiplier = 1;
+
+   // 27/07/2015 - credo di aver trovato un bug
+   // il maxMultiplier dovrebbe essere 1+il numero trovato! Invece era pari al numero trovato!
+   // maxMultiplier = 1 + maxMultiplier;
    
    //Print("autoTargetMultiplier: ",maxMultiplier );
    return maxMultiplier;
@@ -1063,7 +1119,7 @@ double getSize(int risk, double distance)
    if (minLot == 0.01) finalSize = NormalizeDouble(finalSize,2);
    
    
-   Print("getSize() - Risk="+risk+" - Distamce="+distance+" - amountRisked="+amountRisked+" - finalSize="+finalSize);
+   Print("getSize() - Risk="+(string)risk+" - Distamce="+(string)distance+" - amountRisked="+(string)amountRisked+" - finalSize="+(string)finalSize);
    if (usePercentageRisk == true) 
       return finalSize;
    else
@@ -1085,6 +1141,9 @@ int commentaire()
    {
 
 //   int dj = TimeCurrent();
+   int cPips = 0, cLib = 0; //pips fatti e valore della libreria
+   if (ArraySize(historicPips) > 0) cPips = historicPips[ArraySize(historicPips)-1];
+   if (ArraySize(historicPipsMA) > 0) cLib = historicPipsMA[ArraySize(historicPipsMA)-1];
 
 
     Comment( "\n ","\n ","\n ","\n ",
@@ -1104,7 +1163,7 @@ int commentaire()
 
             "\n ",
             
-            "\n Pips / LIB: ",historicPips[ArraySize(historicPips)-1], " / ", historicPipsMA[ArraySize(historicPipsMA)-1],
+            "\n Pips / LIB: ",(string)cPips, " / ", (string)cLib,
             
             "\n Next Order TPMultip.: ",autoTargetMultiplier(TP_Paolone_Multiplier),
             
