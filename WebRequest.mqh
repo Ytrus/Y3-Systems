@@ -13,9 +13,11 @@
 string webRequestBody; // variabile usata per contenere il messaggio da inviare al web server. Dichiarata qui così è disponibile in tutti i BOT includendo questo file
 int webRequestAttempts = 0;
 
-bool sendRequest(string destinationURL,string dataString, int maxAttempts = 3)
+bool sendRequest(string destinationURL,string dataString, string PreMessage = "", int maxAttempts = 3)
    {
    
+      // PreMessage     serve ad identificare chi ha chiamato la procedura dai log. Viene aggiunta ai messaggi stampati da sendRequest
+      
       
       //---------------------------------------------------------+
       // per evitare centinaia di tentativi, in caso di errore   |
@@ -45,7 +47,7 @@ bool sendRequest(string destinationURL,string dataString, int maxAttempts = 3)
      
       //gestisco la risposta
       if (res == -1) // la chiamata non è stata fatta: forse si deve aggiungere l'indirizzo web a quelli consentiti
-         {Alert("Attenzione: impossibile inviare i dati al server web. Aggiungere "+ destinationURL +" ai consentiti"); return false;}
+         {Alert(PreMessage+" - Attenzione: impossibile inviare i dati al server web. Aggiungere "+ destinationURL +" ai consentiti"); return false;}
       else
       {
          
@@ -59,14 +61,14 @@ bool sendRequest(string destinationURL,string dataString, int maxAttempts = 3)
                        
             // se la risposta del server contiene 'OK' la registrazione è andata a buon fine
             if (StringFind(responseBody,"OK",0) != -1 )
-               {Print("Dati inviati al server web. Risposta: "+responseBody); webRequestAttempts = 0; return true;}
+               {Print(PreMessage+" - Dati inviati al server web. Risposta: "+responseBody); webRequestAttempts = 0; return true;}
             
             //altrimenti il server ha risposto con l'errore incontrato (solitamente mancanza o incompatibilità dei dati
             else
-               {Print("Dati inviati al server web con ERRORE. Risposta: "+responseBody); webRequestAttempts+=1; return false;}
+               {Print(PreMessage+" - Dati inviati al server web con ERRORE. Risposta: "+responseBody); webRequestAttempts+=1; return false;}
           }
 
          else
-            {Alert("Errore durante l'invio dei dati al server web. Risposta: "+responseBody); webRequestAttempts+=1; return false;}
+            {Alert(PreMessage+" - Errore durante l'invio dei dati al server web. Risposta: "+responseBody); webRequestAttempts+=1; return false;}
       }
    }
