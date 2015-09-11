@@ -20,26 +20,38 @@ string nomIndice = "GER30"; //sovrascritto dopo in init()
  
 
 //--------number of lots to trade--------------+
+extern string ext_bot_settings = "=============== Bot Settings ===============";
 extern int SIGNATURE = 0018100;
 extern string COMMENT = "HA_T";
-extern double POWER = 20; //POWER: dimensione degli ordini
-extern bool usePercentageRisk = false;
-extern string info_p = "Se usePercentageRisk = true: POWER è la % equity da rishiare ad ogni trade. Altrimenti POWER = Lotti per ordine.";
+extern string nameOfHistoryFile = "HA_Trend_System_HST_";
+
+extern string ext_trade_settings = "=============== Trade Settings ===============";
+extern double POWER = 20; 
+bool usePercentageRisk = false;
+string info_p = "Se usePercentageRisk = true: POWER è la % equity da rishiare ad ogni trade. Altrimenti POWER = Lotti per ordine.";
 extern string startingHour = "6:00"; //startingHour: orario inizio attività
 extern string endingHour = "17:00"; //endingHour: orario di fine attività 
-
-double TP_Multiplier = 1; // imposta il rapporto rischio/rendimento. da 1:1 in su su TUTTI gli ordini
-extern double TP_Paolone_Multiplier = 3; //TP_Paolone_Multiplier: def 3
-int numberOfOrders = 1; //usato per decidere quanti ordini aprire per ogni posizione. Moltiplica anche la distanza del TP (x1, x2, x3 etc)
 extern int SL_added_pips = 2; // SL_added_pips: pip da aggiungere allo SL
 
-extern string nameOfHistoryFile = "HA_Trend_System_HST_";
-extern int Y3_POWER_LIB_maPeriod = 5;
 
-extern string Trend = "=== Media mobile trend ===";
+
+extern string ext_trend_settings = "=============== Media mobile trend ===============";
 extern int maFilterPeriod = 9;
 
-string bot_name = "HA Trend System";
+
+extern string ext_web_server_settings = "=============== Web Server ===============";
+extern bool registerBars = true; //registerBars: registra le barre sul web server
+extern bool registerOrders = true; //registerOrders: registra gli ordini sul web server
+
+extern string ext_email_settings = "=============== email Settings ===============";
+extern bool sendEmailOnOrderOpen = false; //Manda una mail quando apre un ordine
+extern bool sendEmailOnOrderClose = false; //Manda una mail quando chiude un ordine
+
+
+int Y3_POWER_LIB_maPeriod = 5;
+double TP_Multiplier = 1; // imposta il rapporto rischio/rendimento. da 1:1 in su su TUTTI gli ordini
+double TP_Paolone_Multiplier = 3; //TP_Paolone_Multiplier: def 3
+int numberOfOrders = 1; //usato per decidere quanti ordini aprire per ogni posizione. Moltiplica anche la distanza del TP (x1, x2, x3 etc)
 
 bool enablePowerLIB = true;
 bool enableAdaptive_ma = true;
@@ -48,13 +60,7 @@ bool enableClassicTP = true;
 bool enableAutoProfitMultiplier = true;
 bool enableAdaptive_AMA = false; //per compatibilità con la Y3_POWER_LIB, che lo usa nella versione AMA
 
-
-extern string wsSettings = "=== Web Server ===";
-extern bool registerBars = true; //registerBars: registra le barre sul web server
-
-extern string emailSettings = "=== email Settings ===";
-extern bool sendEmailOnOrderOpen = true; //Manda una mail quando apre un ordine
-extern bool sendEmailOnOrderClose = true; //Manda una mail quando chiude un ordine
+string bot_name = "HA Trend System";
 
 
 //+------------------------------------------------------------------+
@@ -99,10 +105,12 @@ double tollerance; // tolleranza in pip della distanza dai massimi e minimi per 
 double haOpen[4], haClose[4], haHigh[4], haLow[4]; // arrays con i valori delle Haiken Ashi
 double nearestMax, nearestMin; //minimo e massimo delle ultime 3 barre, per sapere se il reverse è tradabile
 double min, max; //minimo e massimo di giornata, aggiornati ad ogni nuova barra
+double tpPaolone = 1; //usato nell'inserimento ordini, necessario per avere il valore dopo l'inserimento dell'ordine
 
 
 bool buyConditions[20]; 
 bool sellConditions[20]; 
+string closeDescription; // per sapere perchè ha chiuso un ordine e scriverlo sul web Server
 
 double atr, ARC, maxSAR, minSAR, maFilter;   
 
@@ -114,6 +122,7 @@ bool webBarDataSendedToServer; // gestisce se inviare o no i dati iniziali di un
 //+--------------- Include ------------------------+
 
 #include  "Y3_POWER_LIB.mqh"
+//#include    "Y3_POWER_LIB_Recovery.mqh"
 #include    "WebRequest.mqh"
 
 //+----------------------- end --------------------+
@@ -222,7 +231,13 @@ int init()
          registerBars = false;               // non tentare di registrare le barre sul web Server
          sendEmailOnOrderOpen = false;       // non tentare di inviare email all'apertura di un ordine
          sendEmailOnOrderClose = false;      // non tentare di invare email alla chiusura di un ordine
+         registerOrders = false;             // non tentare di registrare gli ordini sul web Server
    }
+
+   // test x l'invio di un ordine al webserver (cambiare il ticket perchè dopo un mese escono dalla history!)
+   // bool test = webSendOpenOrder(18366957,3);
+   // test = webSendCloseOrder(18366957,3);
+
 
 //----
 
@@ -573,7 +588,7 @@ for(int pos=0;pos<OrdersTotal();pos++)
       ;
       
       // invio la richiesta al webServer
-      webBarDataSendedToServer = sendRequest("http://www.y3web.it/addNewBar.asp",webRequestBody,3);
+      webBarDataSendedToServer = sendRequest("http://www.y3web.it/addNewBar.asp",webRequestBody,"Registrazione Barra",3);
       
    }
 
@@ -608,11 +623,13 @@ int ouvertureBuy()
    
          //TP variabile in base alla posizione rispetto alla media di bollinger
          double middleBand = iBands(nomIndice,0,14,2,0,PRICE_MEDIAN,MODE_MAIN,0);
+         tpPaolone = 1;
 
-         if ( MarketInfo(nomIndice,MODE_BID) > middleBand ) 
-            {takeprofit = MarketInfo(nomIndice,MODE_ASK) + autoTargetMultiplier(TP_Paolone_Multiplier)*(MarketInfo(nomIndice,MODE_ASK) - stoploss) * orx * TP_Multiplier ;}
-         else
-            {takeprofit = MarketInfo(nomIndice,MODE_ASK) + (MarketInfo(nomIndice,MODE_ASK) - stoploss) * orx * TP_Multiplier ;}
+         // applico il moltiplicatore del TP solo se siamo sopra alla media
+         if ( MarketInfo(nomIndice,MODE_BID) > middleBand ) tpPaolone = autoTargetMultiplier(TP_Paolone_Multiplier);
+
+
+         takeprofit = MarketInfo(nomIndice,MODE_ASK) + tpPaolone*(MarketInfo(nomIndice,MODE_ASK) - stoploss) * orx * TP_Multiplier ;
    
          stoploss   = NormalizeDouble(stoploss-1000*Point ,MarketInfo(nomIndice,MODE_DIGITS));
         
@@ -632,6 +649,15 @@ int ouvertureBuy()
             {
                tradeBuy = true; 
                
+               
+               //------------------------------------------------------+
+               // Mando l'ordine al web Server per registrarlo         |
+               //------------------------------------------------------+               
+               
+               if (registerOrders == true) webSendOpenOrder(ticketBuy, 3);
+
+
+
                //------------------------------------------------------+
                // Mando email per comunicare apertura dell'ordine      |
                //------------------------------------------------------+
@@ -640,10 +666,6 @@ int ouvertureBuy()
                   bool mailResult = SendMail(bot_name+" ha aperto "+ (string)orx +" posizioni BUY", "Strumento:"+ nomIndice +" -  "+ (string)size);
                   if (mailResult == false) Print("Errore durante invio email BUY: "+ (string)GetLastError());
                }
-               
-               //------------------------------------------------------+
-               // Mando l'ordine al web Server per registrarlo         |
-               //------------------------------------------------------+               
                
                
             }
@@ -674,16 +696,30 @@ int fermetureBuy(int tkt)
 
    {
 
-   //------------------close ordre buy------------------------------------+
-   if (OrderSelect(tkt,SELECT_BY_TICKET)==true)
-      lots = OrderLots();     
-
-   t = OrderClose(tkt,lots,MarketInfo(nomIndice,MODE_BID),5,Brown);
-   Print("fermetureBuy - ticketBuy ",tkt);
-
-   //-------------------confirmation du close buy--------------------------+
-
-   if (t == true) {sortieBuy = 0; addOrderToHistory(tkt); ticketBuy = 0; }
+      //------------------close ordre buy------------------------------------+
+      if (OrderSelect(tkt,SELECT_BY_TICKET)==true)
+         lots = OrderLots();     
+   
+      t = OrderClose(tkt,lots,MarketInfo(nomIndice,MODE_BID),5,Brown);
+      Print("fermetureBuy - ticketBuy ",tkt);
+   
+      //-------------------confirmation du close buy--------------------------+
+   
+      if (t == true) 
+      {
+         sortieBuy = 0; 
+         addOrderToHistory(tkt);  
+         
+         //------------------------------------------------------+
+         // Aggiorno l'ordine sul web Server                     |
+         //------------------------------------------------------+               
+         if (registerOrders == true) webSendCloseOrder(tkt, 3);
+         
+         
+         ticketBuy = 0;
+         
+         
+      }   
 
    }
 
@@ -716,12 +752,13 @@ int ouvertureSell()
          //TP variabile in base alla posizione rispetto alla media di bollinger
          double middleBand = iBands(nomIndice,0,14,2,0,PRICE_MEDIAN,MODE_MAIN,0);
 
+         tpPaolone = 1;
+         
+         // applico il moltiplicatore del TP solo se siamo sopra alla media
+         if ( MarketInfo(nomIndice,MODE_BID) < middleBand ) tpPaolone = autoTargetMultiplier(TP_Paolone_Multiplier);
+         
 
-
-         if ( MarketInfo(nomIndice,MODE_BID) < middleBand ) 
-            {takeprofit = MarketInfo(nomIndice,MODE_BID) - autoTargetMultiplier(TP_Paolone_Multiplier)*(stoploss - MarketInfo(nomIndice,MODE_BID)) * orx * TP_Multiplier;}
-         else
-            {takeprofit = MarketInfo(nomIndice,MODE_BID) - (stoploss - MarketInfo(nomIndice,MODE_BID)) * orx * TP_Multiplier;}
+         takeprofit = MarketInfo(nomIndice,MODE_BID) - tpPaolone*(stoploss - MarketInfo(nomIndice,MODE_BID)) * orx * TP_Multiplier;
 
 
          // TP originale
@@ -748,6 +785,14 @@ int ouvertureSell()
             {
                tradeSell = true; 
                
+               
+               //------------------------------------------------------+
+               // Mando l'ordine al web Server per registrarlo         |
+               //------------------------------------------------------+               
+               
+               if (registerOrders == true) webSendOpenOrder(ticketSell, 3);
+
+               
                //------------------------------------------------------+
                // Mando email per comunicare apertura dell'ordine      |
                //------------------------------------------------------+
@@ -757,11 +802,6 @@ int ouvertureSell()
                   if (mailResult == false) Print("Errore durante invio email SELL: "+ (string)GetLastError());
                }
                
-               //------------------------------------------------------+
-               // Mando l'ordine al web Server per registrarlo         |
-               //------------------------------------------------------+               
-               
-               //toDo....
                
             }
          }
@@ -790,16 +830,31 @@ int fermetureSell(int tkt)
 
    {
 
-   //------------------close ordre buy------------------------------------+
-   if (OrderSelect(tkt,SELECT_BY_TICKET)==true)
-      lots = OrderLots();     
-
-   t = OrderClose(tkt,lots,MarketInfo(nomIndice,MODE_ASK),5,Brown);
-   Print("fermetureBuy - ticketSell ",tkt);
-
-   //-------------------confirmation du close buy--------------------------+
-
-   if (t == true) {sortieSell = 0; addOrderToHistory(tkt); ticketSell = 0;}
+      //------------------close ordre sell------------------------------------+
+      if (OrderSelect(tkt,SELECT_BY_TICKET)==true)
+         lots = OrderLots();     
+   
+      t = OrderClose(tkt,lots,MarketInfo(nomIndice,MODE_ASK),5,Brown);
+      Print("fermetureBuy - ticketSell ",tkt);
+   
+      //-------------------confirmation du close buy--------------------------+
+   
+      if (t == true) 
+      {
+         sortieSell = 0; 
+         addOrderToHistory(tkt); 
+         
+         
+         //------------------------------------------------------+
+         // Aggiorno l'ordine sul web Server                     |
+         //------------------------------------------------------+               
+         if (registerOrders == true) webSendCloseOrder(tkt, 3);      
+         
+         
+         
+         ticketSell = 0;
+      }
+   
 
    }
 
@@ -988,7 +1043,10 @@ bool slReached(int tkt)
       }
        
    }
-      return result;
+
+   if (result) closeDescription="slReached: raggiunto Stop Loss";
+
+   return result;
 
 }
 //-----------------end----------------------------------------+ 
@@ -1023,7 +1081,11 @@ bool tpReached(int tkt)
       }
        
    }
-      return result;
+
+   if (result) closeDescription="tpReached: raggiunto Take Profit";
+
+   
+   return result;
 
 }
 //-----------------end----------------------------------------+ 
@@ -1068,7 +1130,11 @@ bool isCameBack(int tkt)
       }
        
    }
-      return result;
+   
+   
+   if (result) closeDescription="isCameBack: Tornato indietro dopo aver visto un profitto pari al rischio";
+   
+   return result;
 
 }
 //-----------------end----------------------------------------+ 
@@ -1082,6 +1148,9 @@ bool isCameBack(int tkt)
 //--------------- SIZE AUTOMATICA ----------------------------+ 
 double getSize(int risk, double distance)
 {
+
+   if (usePercentageRisk == false) return POWER;
+   
    double equity = AccountEquity();
    double amountRisked = equity/100*risk;
    double finalSize = 0;
@@ -1101,18 +1170,134 @@ double getSize(int risk, double distance)
    if (minLot == 0.01) finalSize = NormalizeDouble(finalSize,2);
    
    
-   Print("getSize() - Risk="+risk+" - Distamce="+distance+" - amountRisked="+amountRisked+" - finalSize="+finalSize);
-   if (usePercentageRisk == true) 
-      return finalSize;
-   else
-      return POWER;
+   //Print("getSize() - Risk="+(string)risk+" - Distamce="+(string)distance+" - amountRisked="+(string)amountRisked+" - finalSize="+(string)finalSize);
+   
+   return finalSize;
+
 }
 
 //-----------------end----------------------------------------+ 
 
 
 
+//------------------------------------------------------------+
+//  web request apertura ordine                               |
+//------------------------------------------------------------+
+bool webSendOpenOrder(int tkt, int attempts = 3)
+{
 
+      // se non trovo l'ordine mi fermo e lo scrivo
+      if (OrderSelect(tkt,SELECT_BY_TICKET)==false) {Alert("webSendOpenOrder: ordine non trovato ("+(string)tkt+")"); return false;}
+      
+      // encoded strings
+      string bot_name_encoded = bot_name; StringReplace(bot_name_encoded, " ", "+");
+      string orderType = "BUY";  if (OrderType()==1) orderType = "SELL";
+      string tpMultiplier = "1";
+      
+      webRequestBody = 
+      "accountID="            +(string)AccountNumber()+
+      "&symbol="              +(string)OrderSymbol()+
+      "&systemName="          +bot_name_encoded+
+      "&systemMagic="         +(string)SIGNATURE+
+      "&orderTicket="         +(string)tkt+
+      "&orderType="           +orderType+
+      "&orderSize="           +(string)OrderLots()+
+      "&takeProfit="          +(string)OrderTakeProfit()+
+      "&stopLoss="            +(string)OrderStopLoss()+
+      "&openTime="            +(string)TimeToStr(OrderOpenTime(),TIME_DATE)+"+"+(string)TimeToStr(OrderOpenTime(),TIME_SECONDS)+
+      "&openPrice="           +(string)OrderOpenPrice()+
+      "&openPositionAsk="     +(string)MarketInfo(nomIndice,MODE_ASK)+
+      "&openPositionBid="     +(string)MarketInfo(nomIndice,MODE_BID)+
+      "&tpMultiplier="        +(string)tpPaolone+
+      "&point="               +DoubleToString(MarketInfo(OrderSymbol(),MODE_POINT),5)+
+      "&tickValue="           +(string)MarketInfo(OrderSymbol(),MODE_TICKVALUE)+
+      
+      // aggiungere le informazioni di partenza se necessario
+      "&openConditions="+
+      "Buy+Conditions:+0."    +(string)buyConditions[0]+"+1."+(string)buyConditions[1]+"+2."+(string)buyConditions[2]+"+3."+(string)buyConditions[3]+"+5."+(string)buyConditions[5]+"+6."+(string)buyConditions[6]+"+7."+(string)buyConditions[7]+"+8."+(string)buyConditions[8]+"+9."+(string)buyConditions[9]+"+10."+(string)buyConditions[10]+"; "+
+      "Sell+Conditions:+0."   +(string)sellConditions[0]+"+1."+(string)sellConditions[1]+"+2."+(string)sellConditions[2]+"+3."+(string)sellConditions[3]+"+5."+(string)sellConditions[5]+"+6."+(string)sellConditions[6]+"+7."+(string)sellConditions[7]+"+8."+(string)sellConditions[8]+"+9."+(string)sellConditions[9]+"+10."+(string)sellConditions[10]+"; "+
+      "nearestMin:+"          +(string)nearestMin+";+"+
+      "nearestMax:+"          +(string)nearestMax+";+"+
+      "min:+"                 +(string)min+";+"+
+      "max:+"                 +(string)max+";+"+
+      "tollerance:+"          +(string)tollerance+";+"+
+      "MA("                  +(string)getMaFilter(maFilterPeriod)+ ")+Value:+" +(string)maFilter+";+" 
+      ;
+      
+      // invio la richiesta al webServer (provo 10 volte)
+      bool res;
+      for (int or = 1; or<=attempts ;or++)
+      {
+         res = sendRequest("http://www.y3web.it/addOrder.asp",webRequestBody,"webSendOpenOrder()",3); 
+         if (res) break;
+      }
+
+      return res;
+}
+
+
+
+
+//------------------------------------------------------------+
+//  web request chiusura ordine                               |
+//------------------------------------------------------------+
+bool webSendCloseOrder(int tkt, int attempts = 3)
+{
+
+      // se non trovo l'ordine mi fermo e lo scrivo
+      if (OrderSelect(tkt,SELECT_BY_TICKET)==false) {Alert("webSendCloseOrder: ordine non trovato ("+(string)tkt+")"); return false;}
+      
+      // encoded strings
+      string bot_name_encoded = bot_name; StringReplace(bot_name_encoded, " ", "+");
+      string orderType = "BUY";  if (OrderType()==1) orderType = "SELL";
+      
+      // calcolo i pips guadagnati o persi da quest'ordine (mi serve un intero)
+      double orderPips = 0;
+      
+      if (orderType == "BUY")
+         orderPips = OrderClosePrice()-OrderOpenPrice();
+      else
+         orderPips = OrderOpenPrice()-OrderClosePrice();
+      
+      orderPips = NormalizeDouble(orderPips/Point, Digits);
+      
+      int cPips = 0, cLib = 0;                  //pips cumulati e valore della libreria
+      if (ArraySize(historicPips) > 0) cPips    = historicPips[ArraySize(historicPips)-1];
+      if (ArraySize(historicPipsMA) > 0) cLib   = historicPipsMA[ArraySize(historicPipsMA)-1];
+      
+      StringReplace(closeDescription, " ", "+");
+      if (StringLen(closeDescription) < 1) closeDescription = "Nessuna+nota+disponibile";
+      
+     
+      webRequestBody = 
+      "accountID="            +(string)AccountNumber()+
+      "&symbol="              +(string)OrderSymbol()+
+      "&orderTicket="         +(string)tkt+
+      "&closeTime="           +(string)TimeToStr(OrderCloseTime(),TIME_DATE)+"+"+(string)TimeToStr(OrderCloseTime(),TIME_SECONDS)+
+      "&closePrice="          +(string)OrderClosePrice()+
+      "&closePositionAsk="    +(string)MarketInfo(nomIndice,MODE_ASK)+
+      "&closePositionBid="    +(string)MarketInfo(nomIndice,MODE_BID)+    
+      "&pips="                +(string)orderPips+
+      "&cumulativePips="      +(string)cPips+
+      "&cumulativeGau="       +(string)cLib+
+      "&orderProfit="         +(string)OrderProfit()+
+      
+      // aggiungere le informazioni di partenza se necessario
+      "&closeConditions="     +closeDescription
+      ;
+      
+      //Print(webRequestBody);
+      
+      // invio la richiesta al webServer (provo 10 volte)
+      bool res;
+      for (int or = 1; or<=attempts ;or++)
+      {
+         res = sendRequest("http://www.y3web.it/closeOrder.asp",webRequestBody,"webSendCloseOrder()",3); 
+         if (res) break;
+      }
+
+      return res;
+}
 
 
 
