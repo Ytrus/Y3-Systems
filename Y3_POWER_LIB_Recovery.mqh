@@ -321,7 +321,7 @@ int addOrderToHistory(int ticket){
 // ---------------------end--------------------------------+
 
 // ---------------- SET POWER --------------------+
-double setPower(double originalPower){
+double setPower(double originalPower, int LooseRatio, int WinRatio){
 
 
    // se non ho dati nell'array historicPipsMA, restituisco originalPower
@@ -331,52 +331,137 @@ double setPower(double originalPower){
    ArraySetAsSeries(historicPips, true);
    ArraySetAsSeries(historicPipsMA, true);
 
-   
-   double fix = 10;
-   double factor = 0;
-   
+   double minLot = MarketInfo(nomIndice,MODE_MINLOT);
+  
    //calculate the moving averages on earned pips
    macurrent = historicPipsMA[0];
    
-   // per ogni posizione consecutiva in perdita sommo fix
+   
+   //----------------------------------------------------+
+   //  Recovery sulle posizioni
+   //----------------------------------------------------+
+   // calcolo le digits dei lotti dello strumento
+   int lotDigits;
+   
+   if(minLot == 1)  lotDigits = 0;
+   if(minLot == 0.1)  lotDigits = 1;
+   if(minLot == 0.01)  lotDigits = 2;
+
+   
+   
+   double step = 0;              // costante da sommare o sottrarre ad ogni iterazione
+   double factor = 0;            // fattore finale da sommare alla dimensione (risultato del recovery)
+
+   // calcolo lo step come percentuale della size originale
+   double LooseStep = NormalizeDouble( (originalPower/100*LooseRatio), lotDigits);
+   double WinStep = NormalizeDouble( (originalPower/100*WinRatio), lotDigits);
+
+   
+   // per ogni posizione consecutiva in perdita sommo LooseStep
    for (int x=0; x<=ArraySize(historicPips)-2; x++)
    {  
-      if (historicPips[x]>historicPips[x+1]) break;
-      if (historicPips[x]<historicPips[x+1]) factor = factor + fix;
+      if (historicPips[x]>historicPips[x+1]) break;                        // se la posizione era in guadagno, esco senza sommare nulla
+      if (historicPips[x]<historicPips[x+1])                               // altrimenti sommo step
+      {
+         
+         factor = factor + LooseStep;
+         
+         // ---------------------------------------------------------+
+         //   OPO - Open Orders
+         // ---------------------------------------------------------+
+         // se l'ultimo ordine CHIUSO era perdente, sommo step anche per ogni ordine aperto che ho in essere
+         if(x==0)
+         {
+            for(int pos=0;pos<OrdersTotal();pos++)
+            {
+               if(OrderSelect(pos,SELECT_BY_POS)==false) continue;
+               if ( (OrderMagicNumber() == SIGNATURE) && (OrderSymbol() == nomIndice) && (OrderCloseTime() == 0) )
+                  {
+                     factor = factor + LooseStep; //versione che ignora profitto degli ordini aperti
+                     
+                     // test verifica se ordini aperti sono in guadagno o in perdita
+                     //if (OrderProfit() > 0)
+                     //   factor = factor - LooseStep;
+                     //else
+                     //   factor = factor + LooseStep;
+                        
+                  }
+            }
+         }
+         
+
+      }
    }
    
-   
+   // per ogni posizione consecutiva in guadagno sottraggo WinStep
    for (int x=0; x<=ArraySize(historicPips)-2; x++)
    {  
-      if (historicPips[x]<historicPips[x+1]) break;
-      if (historicPips[x]>historicPips[x+1]) factor = factor - fix;
-   }   
-   
-   if (factor<0.01) factor=1;
-   
-   //Print("setPower - pips: ",historicPips[0], " - iMA: ",macurrent);
-   
-   if (historicPips[0] < macurrent) { // if performance goes under ema, limit the lot size to 0.01
-      
-      if (enableLibrary==true) {//activate reduction only if library is enabled
-         
-         double minLot = MarketInfo(nomIndice,MODE_MINLOT);
-         
-         newPower = minLot;
+      if (historicPips[x]<historicPips[x+1]) break;                        // se la posizione era in perdita, esco senza sottrarre nulla
+      if (historicPips[x]>historicPips[x+1])                               // altrimenti sottraggo step
+      {
 
+            factor = factor - WinStep;
+
+         
+         // ---------------------------------------------------------+
+         //   OPO - Open Orders
+         // ---------------------------------------------------------+        
+         // se l'ultimo ordine CHIUSO era vincente, sottraggo step anche per ogni ordine aperto che ho in essere
+         if(x==0)
+         {
+            for(int pos=0;pos<OrdersTotal();pos++)
+            {
+               if(OrderSelect(pos,SELECT_BY_POS)==false) continue;
+               if ( (OrderMagicNumber() == SIGNATURE) && (OrderSymbol() == nomIndice) && (OrderCloseTime() == 0) )
+                  {
+                     factor = factor - WinStep; //versione che ignora profitto degli ordini aperti
+                     
+                     // test verifica se ordini aperti sono in guadagno o in perdita
+                     //if (OrderProfit() > 0)
+                     //   factor = factor - WinStep;
+                     //else
+                     //   factor = factor + WinStep;
+                        
+                  }
+            }
          }
+      }
+   }   
+
+
+   // verifico se ci sono degli ordini aperti.
+   // per ogni ordine aperto aggiungo un ulteriore step
+
+
+   
+   if (historicPips[0] < macurrent) // if performance goes under ema, limit the lot to min Lot Size
+   { 
+      
+      if (enableLibrary==true) 
+      {//activate reduction only if library is enabled
+         
+         newPower = minLot+ factor;
+         if (newPower <= 0) newPower = minLot;
+
+      }
       else
-         newPower = originalPower;
+      {
+         newPower = originalPower+ factor;
+         if (newPower <= 0) newPower = originalPower;
+      }
    }
    else
-      newPower = originalPower;
-
+   {
+      newPower = originalPower+ factor;
+      if (newPower <= 0) newPower = originalPower;
+   }
+   
    ArraySetAsSeries(historicPips, false);
    ArraySetAsSeries(historicPipsMA, false);
    
    
    
-   return(newPower + factor);
+   return(newPower);
 
 }
 

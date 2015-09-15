@@ -27,11 +27,11 @@ extern string nameOfHistoryFile = "HA_System_HST_";
 
 extern string ext_trade_settings = "=============== Trade Settings ===============";
 extern double POWER = 20; 
-bool usePercentageRisk = false;
-string info_p = "Se usePercentageRisk = true: POWER è la % equity da rishiare ad ogni trade. Altrimenti POWER = Lotti per ordine.";
 extern string startingHour = "6:00"; //startingHour: orario inizio attività
 extern string endingHour = "17:00"; //endingHour: orario di fine attività 
 extern int SL_added_pips = 2; // SL_added_pips: pip da aggiungere allo SL
+extern int LooseRecoveryRatio = 50; // Loose RecoveryRatio (%)
+extern int WinRecoveryRatio = 50; // Win RecoveryRatio (%)
 
 extern string ext_web_server_settings = "=============== Web Server ===============";
 extern bool registerBars = true; //registerBars: registra le barre sul web server
@@ -41,6 +41,9 @@ extern string ext_email_settings = "=============== email Settings =============
 extern bool sendEmailOnOrderOpen = false; //Manda una mail quando apre un ordine
 extern bool sendEmailOnOrderClose = false; //Manda una mail quando chiude un ordine
 
+extern string ext_test_settings = "=============== test Settings ===============";
+extern bool usePercentageRisk = false;        
+extern string simulationName = "";
 
 int Y3_POWER_LIB_maPeriod = 5;
 double TP_Multiplier = 1;              // imposta il rapporto rischio/rendimento. da 1:1 in su su TUTTI gli ordini
@@ -109,13 +112,15 @@ string closeDescription; // per sapere perchè ha chiuso un ordine e scriverlo su
 double atr, ARC, maxSAR, minSAR;   
 
 
-datetime lastAnalizedBarTime; //per eseguire alcuni controlli una sola volta per barra: inizializzato in init
-bool webBarDataSendedToServer; // gestisce se inviare o no i dati iniziali di una barra al webServer
+datetime lastAnalizedBarTime;    // per eseguire alcuni controlli una sola volta per barra: inizializzato in init
+bool webBarDataSendedToServer;   // gestisce se inviare o no i dati iniziali di una barra al webServer
+int simulationID;            // serve per scrivere un ID univoco nella simulazione sul web server per distinguerle
+string simulationNamePrefix;
 
 //+--------------- Include ------------------------+
 
-#include  "Y3_POWER_LIB.mqh"
-//#include  "Y3_POWER_LIB_Recovery.mqh"
+//#include  "Y3_POWER_LIB.mqh"
+#include  "Y3_POWER_LIB_Recovery.mqh"
 #include    "WebRequest.mqh"
 
 //+----------------------- end --------------------+
@@ -225,12 +230,17 @@ int init()
          registerBars = false;               // non tentare di registrare le barre sul web Server
          sendEmailOnOrderOpen = false;       // non tentare di inviare email all'apertura di un ordine
          sendEmailOnOrderClose = false;      // non tentare di invare email alla chiusura di un ordine
-         registerOrders = false;             // non tentare di registrare gli ordini sul web Server
+         simulationID = GetTickCount();      // generato SOLO in simulazione. Se <> null il web server registra l'ordine nella tabella SimulationsOrder, altrimenti in Orders (reali)
    }
+
+   
+   // costruisco un prefisso per il nome della simulazione
+   simulationNamePrefix = "LooseRecoveryRatio:+"+(string)LooseRecoveryRatio+"+-+WinRecoveryRatio:+"+(string)WinRecoveryRatio+"+-+";
+
 
    // test x l'invio di un ordine al webserver (cambiare il ticket perchè dopo un mese escono dalla history!)
    // bool test = webSendOpenOrder(18371722,3);
-   //  test = webSendCloseOrder(18371722,3);
+   // bool  test = webSendCloseOrder(18371722,3);
 
 //----
 
@@ -617,7 +627,7 @@ int ouvertureBuy()
          
          size = getSize(POWER, MathAbs((MarketInfo(nomIndice,MODE_ASK) - stoploss)) - 1000 * Point  );
    
-         ticketBuy = OrderSend(nomIndice,OP_BUY,setPower(size),MarketInfo(nomIndice,MODE_ASK),8,stoploss,takeprofit,COMMENT ,SIGNATURE,0,MediumBlue);
+         ticketBuy = OrderSend(nomIndice,OP_BUY,setPower(size, LooseRecoveryRatio, WinRecoveryRatio),MarketInfo(nomIndice,MODE_ASK),8,stoploss,takeprofit,COMMENT ,SIGNATURE,0,MediumBlue);
    
         
    
@@ -750,7 +760,7 @@ int ouvertureSell()
 
          size = getSize(POWER, MathAbs((MarketInfo(nomIndice,MODE_BID) - stoploss)) - 1000*Point);
    
-         ticketSell = OrderSend(nomIndice,OP_SELL,setPower(size),MarketInfo(nomIndice,MODE_BID),8,stoploss,takeprofit,COMMENT ,SIGNATURE,0,Purple);
+         ticketSell = OrderSend(nomIndice,OP_SELL,setPower(size, LooseRecoveryRatio, WinRecoveryRatio),MarketInfo(nomIndice,MODE_BID),8,stoploss,takeprofit,COMMENT ,SIGNATURE,0,Purple);
    
         
    
@@ -1158,9 +1168,15 @@ double getSize(int risk, double distance)
 
 
 
-//------------------------------------------------------------+
-//  web request apertura ordine                               |
-//------------------------------------------------------------+
+//----------------------------------------------------------------+
+//  web request apertura ordine                                   |
+// Funzionamento: invia l'apertura di un ordine al web server     |
+// con tutti i dati necessari. La procedura è identica per        |
+// ordini reali e ordini simulati. Il web server riconosce        |
+// la differenza tramite la variabile simulationID.               |
+// se è vuota, si tratta di un ordine rale, va in Orders          |
+// se è piena l'ordine è una simulazione, va in SimulationsOrders |
+//----------------------------------------------------------------+
 bool webSendOpenOrder(int tkt, int attempts = 3)
 {
 
@@ -1169,12 +1185,15 @@ bool webSendOpenOrder(int tkt, int attempts = 3)
       
       // encoded strings
       string bot_name_encoded = bot_name; StringReplace(bot_name_encoded, " ", "+");
+      string simulationNameEncoded = simulationName; StringReplace(simulationNameEncoded, " ", "+");
       string orderType = "BUY";  if (OrderType()==1) orderType = "SELL";
       string tpMultiplier = "1";
       
       webRequestBody = 
       "accountID="            +(string)AccountNumber()+
       "&symbol="              +(string)OrderSymbol()+
+      "&simulationID="        +(string)simulationID+
+      "&simulationNotes="      +(string)simulationNamePrefix+"+"+simulationNameEncoded+
       "&systemName="          +bot_name_encoded+
       "&systemMagic="         +(string)SIGNATURE+
       "&orderTicket="         +(string)tkt+
@@ -1215,9 +1234,15 @@ bool webSendOpenOrder(int tkt, int attempts = 3)
 
 
 
-//------------------------------------------------------------+
-//  web request chiusura ordine                               |
-//------------------------------------------------------------+
+//----------------------------------------------------------------+
+//  web request chiusura ordine                                   |
+// Funzionamento: invia la chiusura di un ordine al web server    |
+// con tutti i dati necessari. La procedura è identica per        |
+// ordini reali e ordini simulati. Il web server riconosce        |
+// la differenza tramite la variabile simulationID.               |
+// se è vuota, si tratta di un ordine rale, va in Orders          |
+// se è piena l'ordine è una simulazione, va in SimulationsOrders |
+//----------------------------------------------------------------+
 bool webSendCloseOrder(int tkt, int attempts = 3)
 {
 
@@ -1249,6 +1274,7 @@ bool webSendCloseOrder(int tkt, int attempts = 3)
       webRequestBody = 
       "accountID="            +(string)AccountNumber()+
       "&symbol="              +(string)OrderSymbol()+
+      "&simulationID="        +(string)simulationID+
       "&orderTicket="         +(string)tkt+
       "&closeTime="           +(string)TimeToStr(OrderCloseTime(),TIME_DATE)+"+"+(string)TimeToStr(OrderCloseTime(),TIME_SECONDS)+
       "&closePrice="          +(string)OrderClosePrice()+
@@ -1312,7 +1338,7 @@ int commentaire()
             
             "\n Periods Base / Adaptive: ",Y3_POWER_LIB_maPeriod ," / ", adaptive_maPeriod,
             
-            "\n Next Order Size: ",setPower(POWER),
+            "\n Next Order Size: ",setPower(POWER, LooseRecoveryRatio, WinRecoveryRatio),
 
             
 //            "\n +-----------------------------   ",
