@@ -156,9 +156,7 @@ int addOrderToHistory(int ticket){
     historicPips[k] = historicPips[k-1]+pips;
    else
     historicPips[k] = pips;
-    
-   //Print("addOrderToHistory: historicPips["+k+"]"+historicPips[k]);
-   
+      
 
    //prepare the array as timeSeries
    ArraySetAsSeries(historicPips, true);
@@ -292,12 +290,12 @@ int addOrderToHistory(int ticket){
    // =============== end ===========
    
    //calculate the moving averages on earned pips
-   macurrent=iMAOnArray(historicPips,0,adaptive_maPeriod,0,MODE_SMA,0);
-   
+   //macurrent=iMAOnArray(historicPips,0,adaptive_maPeriod,0,MODE_SMA,0); // media mobile con gaussiana sul periodo
+   macurrent=getAMA(historicPips); // AMA
    
    
    //maY3 ver.8
-   macurrent = macurrent + stDev;
+   //macurrent = macurrent + stDev;
    
    
    
@@ -321,8 +319,10 @@ int addOrderToHistory(int ticket){
 // ---------------------end--------------------------------+
 
 // ---------------- SET POWER --------------------+
-double setPower(double originalPower, int LooseRatio, int WinRatio){
+double setPower(double originalPower, int LooseRatio, int WinRatio, double recStopper){
 
+   // se la libreria è disattiva, restituisco la POWER originale
+   if (enableLibrary==false) return originalPower;
 
    // se non ho dati nell'array historicPipsMA, restituisco originalPower
    if (ArraySize(historicPipsMA) == 0) return(originalPower);
@@ -350,7 +350,8 @@ double setPower(double originalPower, int LooseRatio, int WinRatio){
    
    
    double step = 0;              // costante da sommare o sottrarre ad ogni iterazione
-   double factor = 0;            // fattore finale da sommare alla dimensione (risultato del recovery)
+   double loosefactor = 0;       // fattore finale da sommare alla dimensione in caso di perdite precedenti
+   double winfactor = 0;         // fattore finale da sottrarre alla dimensione in caso di perdite precedenti
 
    // calcolo lo step come percentuale della size originale
    double LooseStep = NormalizeDouble( (originalPower/100*LooseRatio), lotDigits);
@@ -364,7 +365,8 @@ double setPower(double originalPower, int LooseRatio, int WinRatio){
       if (historicPips[x]<historicPips[x+1])                               // altrimenti sommo step
       {
          
-         factor = factor + LooseStep;
+         
+         loosefactor = loosefactor + LooseStep;
          
          // ---------------------------------------------------------+
          //   OPO - Open Orders
@@ -377,7 +379,7 @@ double setPower(double originalPower, int LooseRatio, int WinRatio){
                if(OrderSelect(pos,SELECT_BY_POS)==false) continue;
                if ( (OrderMagicNumber() == SIGNATURE) && (OrderSymbol() == nomIndice) && (OrderCloseTime() == 0) )
                   {
-                     factor = factor + LooseStep; //versione che ignora profitto degli ordini aperti
+                     loosefactor = loosefactor + LooseStep; //versione che ignora profitto degli ordini aperti
                      
                      // test verifica se ordini aperti sono in guadagno o in perdita
                      //if (OrderProfit() > 0)
@@ -400,7 +402,7 @@ double setPower(double originalPower, int LooseRatio, int WinRatio){
       if (historicPips[x]>historicPips[x+1])                               // altrimenti sottraggo step
       {
 
-            factor = factor - WinStep;
+            winfactor = winfactor - WinStep;
 
          
          // ---------------------------------------------------------+
@@ -414,7 +416,7 @@ double setPower(double originalPower, int LooseRatio, int WinRatio){
                if(OrderSelect(pos,SELECT_BY_POS)==false) continue;
                if ( (OrderMagicNumber() == SIGNATURE) && (OrderSymbol() == nomIndice) && (OrderCloseTime() == 0) )
                   {
-                     factor = factor - WinStep; //versione che ignora profitto degli ordini aperti
+                     winfactor = winfactor - WinStep; //versione che ignora profitto degli ordini aperti
                      
                      // test verifica se ordini aperti sono in guadagno o in perdita
                      //if (OrderProfit() > 0)
@@ -429,33 +431,38 @@ double setPower(double originalPower, int LooseRatio, int WinRatio){
    }   
 
 
-   // verifico se ci sono degli ordini aperti.
-   // per ogni ordine aperto aggiungo un ulteriore step
 
 
-   
+
+   //-----------------------------------------+
+   // verifico se ci sono degli ordini aperti |
+   //-----------------------------------------+
    if (historicPips[0] < macurrent) // if performance goes under ema, limit the lot to min Lot Size
    { 
-      
-      if (enableLibrary==true) 
-      {//activate reduction only if library is enabled
-         
-         newPower = minLot+ factor;
-         if (newPower <= 0) newPower = minLot;
 
-      }
-      else
-      {
-         newPower = originalPower+ factor;
-         if (newPower <= 0) newPower = originalPower;
-      }
+      //sotto alla lib riduco il potere del recovery
+      newPower = minLot+ NormalizeDouble(recStopper*(loosefactor+winfactor),lotDigits);
+      if (newPower <= 0) newPower = minLot;
+
    }
    else
    {
-      newPower = originalPower+ factor;
+      newPower = originalPower+ loosefactor+winfactor;
       if (newPower <= 0) newPower = originalPower;
    }
+      
    
+   
+   
+   // il consolidator riduce al minimo i lotti se scendiamo sotto al frattale precedente nella curva dei pips
+   if (Consolidator_Active == true){
+      if (historicPips[0] < consolidator()) newPower = minLot;
+   }
+   
+
+
+   
+   //rimetto a posto gli array
    ArraySetAsSeries(historicPips, false);
    ArraySetAsSeries(historicPipsMA, false);
    
@@ -655,13 +662,125 @@ int getMaFilter(int maxMaValue){
    if (result < maxMaValue) result = maxMaValue;
    return result;
    
-   
-   
 
 }
 // ------------------end--------------------------+
 
 
+//------------------------------------------------+
+//   Calcolo dell'AMA da applicare alla libreria
+//------------------------------------------------+
+
+double getAMA(double inputArray[])
+  {
+
+   if (ArraySize(inputArray) == 0) {Print("******* AMA *******: Array vuoto!!"); return -1;}
+   
+   int       periodAMA = 9;
+   int       nfast = 2;
+   int       nslow = 30;
+   double    G = 2.0;
+   double    dK = 2.0; 
+   int       valueNumber = ArraySize(inputArray);
+   
+   //+------------------------------------------------------------------+
+   
+   int    cbars=0, prevbars=0, prevtime=0;
+   
+   double slowSC,fastSC;
+
+    int    i, pos = 0;
+    double noise = 0.000000001, AMA, AMA0, signal, ER;
+    double dSC, ERSC, SSC;
+    //----
+    if (valueNumber > 40) valueNumber = 40;
+    //----
+    if(prevbars == valueNumber) 
+        return(0);
+    //---- TODO: add your code here
+    slowSC = (2.0 / (nslow + 1));
+    fastSC = (2.0 /(nfast + 1));
+    cbars = 0;
+    if(valueNumber <= (periodAMA + 2)) 
+        return(0);
+    //---- check for possible errors
+    if(cbars < 0) 
+        return(-1);
+    //---- last counted bar will be recounted
+    if(cbars > 0) 
+        cbars--;
+    pos = valueNumber - periodAMA - 2;
+    AMA0 = inputArray[pos+1];
+    while(pos >= 0)
+      {
+        if(pos == valueNumber - periodAMA - 2) 
+            AMA0 = inputArray[pos+1];
+        signal = MathAbs(inputArray[pos] - inputArray[pos+periodAMA]);
+        noise = 0.000000001;
+        for(i = 0; i < periodAMA; i++)
+          {
+            noise = noise + MathAbs(inputArray[pos+i] - inputArray[pos+i+1]);
+          }
+        ER = signal / noise;
+        dSC = (fastSC - slowSC);
+        ERSC = ER*dSC;
+        SSC = ERSC + slowSC;
+        AMA = AMA0 + (MathPow(SSC, G) * (inputArray[pos] - AMA0));
+        //----
+//        ddK = (AMA - AMA0);
+/*
+        if((MathAbs(ddK)) > (dK*Point) && (ddK > 0)) 
+            kAMAupsig[pos] = AMA; 
+        else 
+            kAMAupsig[pos] = 0;
+        if((MathAbs(ddK)) > (dK*Point) && (ddK < 0)) 
+            kAMAdownsig[pos] = AMA; 
+        else kAMAdownsig[pos] = 0; 
+*/
+        AMA0 = AMA;
+        pos--;
+      }
+//----
+    prevbars=valueNumber;
+    return(AMA);
+  }
+// ------------------- end -----------------------+
 
 
+
+
+// =================================================+
+//                  CONSOLIDATOR                    |
+// =================================================+
+double consolidator(){
+
+   int trades = ArraySize(historicPips)-1; //numero di trades presenti nell'array, già sottratto di uno per usarlo nei conteggi
+   double highestDownFractal = 0;
+
+
+   // Se non ho almeno 10 trade, non uso il consolidator
+   if (trades < 3) return 0;
+   
+
+   // scorro i trades per trovare i picchi inferiori e salvo il più alto
+   for (int i=1; i<trades; i++){
+      
+      // se ho un frattale down me lo salvo in highestDownFractal
+      if ( (historicPips[i-1]>historicPips[i]) && (historicPips[i]<historicPips[i+1]) ){
+         
+         //se il valore di historicPipsMA[i] è superiore all'attuale valore di highestDownFractal, prendo il nuovo valore
+         if (historicPips[i] > highestDownFractal) highestDownFractal = historicPips[i];
+         
+         
+      }
+   }
+   
+   return highestDownFractal;
+
+
+}
+
+
+
+// ------------------- end -----------------------+
 
