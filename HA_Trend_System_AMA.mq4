@@ -32,6 +32,7 @@ extern string endingHour = "17:00"; //endingHour: orario di fine attività
 extern int SL_added_pips = 2; // SL_added_pips: pip da aggiungere allo SL
 extern int LooseRecoveryRatio = 20; // Loose RecoveryRatio (%)
 extern int WinRecoveryRatio = 5; // Win RecoveryRatio (%)
+extern double RecoveryStopper = 0.5; // Recover Stopper (0.0 - 1.0)
 
 double TP_Multiplier = 1; // imposta il rapporto rischio/rendimento. da 1:1 in su su TUTTI gli ordini
 double TP_Paolone_Multiplier = 3; //TP_Paolone_Multiplier: def 3
@@ -42,7 +43,7 @@ int Y3_POWER_LIB_maPeriod = 5;
 extern string ext_trend_settings = "=============== Media mobile trend ===============";
 extern int maFilterPeriod = 9;
 extern int AMAnFast = 2;
-extern bool enableAdaptive_AMA = false;
+
 
 extern string ext_web_server_settings = "=============== Web Server ===============";
 extern bool registerBars = false; //registerBars: registra le barre sul web server
@@ -64,7 +65,7 @@ bool enableAdaptive_ma = true;
 bool enableClassicSL = true;
 bool enableClassicTP = true;
 bool enableAutoProfitMultiplier = true;
-
+bool enableAdaptive_AMA = false;
 
 //+------------------------------------------------------------------+
 
@@ -239,8 +240,13 @@ int init()
    }
    
 
-   // costruisco un prefisso per il nome della simulazione
-   simulationNamePrefix = "LooseRecoveryRatio:+"+(string)LooseRecoveryRatio+"+-+WinRecoveryRatio:+"+(string)WinRecoveryRatio+"+-+";
+   // costruisco un prefisso per la descrizione della simulazione
+   simulationNamePrefix =  "Lotti:+"+(string)POWER+"+"+
+                           "Added Pips:+"+(string)SL_added_pips+"+"+
+                           "maFilterPeriod:+"+(string)maFilterPeriod+"+"+
+                           "AMAnFast:+"+(string)AMAnFast+"+"+
+                           "LooseRecoveryRatio:+"+(string)LooseRecoveryRatio+"+-+WinRecoveryRatio:+"+(string)WinRecoveryRatio+"+-+"+
+                           "Recovery Stopper:+"+(string)RecoveryStopper+"+";
 
    
    // test x l'invio di un ordine al webserver (cambiare il ticket perchè dopo un mese escono dalla history!)
@@ -664,7 +670,7 @@ int ouvertureBuy()
          
          size = getSize(POWER, MathAbs((MarketInfo(nomIndice,MODE_ASK) - stoploss)) - 1000 * Point  );
    
-         ticketBuy = OrderSend(nomIndice,OP_BUY,setPower(size, LooseRecoveryRatio, WinRecoveryRatio),MarketInfo(nomIndice,MODE_ASK),8,stoploss,takeprofit,COMMENT ,SIGNATURE,0,MediumBlue);
+         ticketBuy = OrderSend(nomIndice,OP_BUY,setPower(size, LooseRecoveryRatio, WinRecoveryRatio, RecoveryStopper),MarketInfo(nomIndice,MODE_ASK),8,stoploss,takeprofit,COMMENT ,SIGNATURE,0,MediumBlue);
    
         
    
@@ -800,7 +806,7 @@ int ouvertureSell()
 
          size = getSize(POWER, MathAbs((MarketInfo(nomIndice,MODE_BID) - stoploss)) - 1000*Point);
    
-         ticketSell = OrderSend(nomIndice,OP_SELL,setPower(size, LooseRecoveryRatio, WinRecoveryRatio),MarketInfo(nomIndice,MODE_BID),8,stoploss,takeprofit,COMMENT ,SIGNATURE,0,Purple);
+         ticketSell = OrderSend(nomIndice,OP_SELL,setPower(size, LooseRecoveryRatio, WinRecoveryRatio, RecoveryStopper),MarketInfo(nomIndice,MODE_BID),8,stoploss,takeprofit,COMMENT ,SIGNATURE,0,Purple);
    
         
    
@@ -1364,7 +1370,7 @@ int commentaire()
             
             "\n Periods Base / Adaptive: ",Y3_POWER_LIB_maPeriod ," / ", adaptive_maPeriod,
             
-            "\n Next Order Size: ",setPower(POWER, LooseRecoveryRatio, WinRecoveryRatio),
+            "\n Next Order Size: ",setPower(POWER, LooseRecoveryRatio, WinRecoveryRatio, RecoveryStopper),
                         
             "\n MA Filter: ",getMaFilter(maFilterPeriod),
 
