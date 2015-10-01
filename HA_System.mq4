@@ -30,8 +30,11 @@ extern double POWER = 20;
 extern string startingHour = "6:00"; //startingHour: orario inizio attività
 extern string endingHour = "17:00"; //endingHour: orario di fine attività 
 extern int SL_added_pips = 2; // SL_added_pips: pip da aggiungere allo SL
-extern int LooseRecoveryRatio = 50; // Loose RecoveryRatio (%)
-extern int WinRecoveryRatio = 50; // Win RecoveryRatio (%)
+extern int LooseRecoveryRatio = 100; // Loose RecoveryRatio (%)
+extern int WinRecoveryRatio = -50; // Win RecoveryRatio (%)
+extern double RecoveryStopper = 0.5; // Recover Stopper (0.0 - 1.0)
+extern bool Consolidator_Active = false;
+extern bool LooseTooMuch_Acive = false;
 
 extern string ext_web_server_settings = "=============== Web Server ===============";
 extern bool registerBars = true; //registerBars: registra le barre sul web server
@@ -234,8 +237,13 @@ int init()
    }
 
    
-   // costruisco un prefisso per il nome della simulazione
-   simulationNamePrefix = "LooseRecoveryRatio:+"+(string)LooseRecoveryRatio+"+-+WinRecoveryRatio:+"+(string)WinRecoveryRatio+"+-+";
+   // costruisco un prefisso per la descrizione della simulazione
+   simulationNamePrefix =  "Lotti:+"+(string)POWER+"+"+
+                           "Added Pips:+"+(string)SL_added_pips+"+"+
+                           "LooseRecoveryRatio:+"+(string)LooseRecoveryRatio+"+-+WinRecoveryRatio:+"+(string)WinRecoveryRatio+"+-+"+
+                           "Recovery Stopper:+"+(string)RecoveryStopper+"+"+
+                           "Consolidator_Active:+" +(string)Consolidator_Active+";+"+
+                           "LooseTooMuch_Acive:+"  +(string)LooseTooMuch_Acive+";+";
 
 
    // test x l'invio di un ordine al webserver (cambiare il ticket perchè dopo un mese escono dalla history!)
@@ -537,7 +545,7 @@ for(int pos=0;pos<OrdersTotal();pos++)
        )
      {
       sortieSell = OrderTicket();       
-      Print("Trovato Ordine Sell da chiudere: ",OrderTicket());
+     // Print("Trovato Ordine Sell da chiudere: ",OrderTicket());
 
       fermetureSell(OrderTicket());
      }
@@ -547,6 +555,21 @@ for(int pos=0;pos<OrdersTotal();pos++)
 
 //-----------------end---------------------------------------------+
 
+
+
+//-------------------Close all orders -----------------------------+
+   
+   // se sto perdendo i pip necessari a tornare a livello del consolidator, chiudo tutto
+   if (loosingTooMuch()){
+      closeAllOrders();
+   }
+   
+   //se sto vincendo abbastanza nel complesso (fissato a priori) chiudo tutto
+   /*
+   if (winningTooMuch()){
+      closeAllOrders();
+   }
+   */
 
    //-------------------------------------------------------+
    // scrivo sul webserver i dati iniziali di questa barra  |
@@ -574,8 +597,9 @@ for(int pos=0;pos<OrdersTotal();pos++)
       "nearestMax:+"          +(string)nearestMax+";+"+
       "min:+"                 +(string)min+";+"+
       "max:+"                 +(string)max+";+"+
-      "tollerance:+"          +(string)tollerance+";+"
-      
+      "tollerance:+"          +(string)tollerance+";+"+
+      "Consolidator_Active:+" +(string)Consolidator_Active+";+"+
+      "LooseTooMuch_Acive:+"  +(string)LooseTooMuch_Acive+";+"
       ;
       
       // invio la richiesta al webServer
@@ -627,7 +651,7 @@ int ouvertureBuy()
          
          size = getSize(POWER, MathAbs((MarketInfo(nomIndice,MODE_ASK) - stoploss)) - 1000 * Point  );
    
-         ticketBuy = OrderSend(nomIndice,OP_BUY,setPower(size, LooseRecoveryRatio, WinRecoveryRatio),MarketInfo(nomIndice,MODE_ASK),8,stoploss,takeprofit,COMMENT ,SIGNATURE,0,MediumBlue);
+         ticketBuy = OrderSend(nomIndice,OP_BUY,setPower(size, LooseRecoveryRatio, WinRecoveryRatio, RecoveryStopper),MarketInfo(nomIndice,MODE_ASK),8,stoploss,takeprofit,COMMENT ,SIGNATURE,0,MediumBlue);
    
         
    
@@ -705,10 +729,13 @@ int fermetureBuy(int tkt)
          if (registerOrders == true) webSendCloseOrder(tkt, 3);
          
          
-         ticketBuy = 0;
+         ticketBuy = 0;       
          
-         
-      }   }
+      }
+
+      else return(-1);
+      
+   }
 
    return(0);
 }
@@ -760,7 +787,7 @@ int ouvertureSell()
 
          size = getSize(POWER, MathAbs((MarketInfo(nomIndice,MODE_BID) - stoploss)) - 1000*Point);
    
-         ticketSell = OrderSend(nomIndice,OP_SELL,setPower(size, LooseRecoveryRatio, WinRecoveryRatio),MarketInfo(nomIndice,MODE_BID),8,stoploss,takeprofit,COMMENT ,SIGNATURE,0,Purple);
+         ticketSell = OrderSend(nomIndice,OP_SELL,setPower(size, LooseRecoveryRatio, WinRecoveryRatio, RecoveryStopper),MarketInfo(nomIndice,MODE_BID),8,stoploss,takeprofit,COMMENT ,SIGNATURE,0,Purple);
    
         
    
@@ -842,7 +869,7 @@ int fermetureSell(int tkt)
          
          ticketSell = 0;
       }
-
+      else return(-1);
 
    }
 
@@ -1131,6 +1158,95 @@ bool isCameBack(int tkt)
 
 
 
+//============================================================+
+//        LOOSING TOO MUCH
+// se il sistema sta, complessivamente, perdendo tanti pip
+// quanti ne mancano a raggiungere il valore dell'ultimo 
+// frattale del consolidator(), li chiudo tutti
+//============================================================+
+bool loosingTooMuch(){
+   
+   // se non è attivo, esco
+   if (LooseTooMuch_Acive == false) return false;
+   
+  
+   double loosingPips = 0;
+   double loosablePips = 0;
+   double consolidatedPips = 0;
+   
+   consolidatedPips = consolidator();
+   
+   // se non ho almeno 3 trades, esco
+   if (ArraySize(historicPips)<3) return false;
+   
+   // se sono già sotto al consolidator, esco
+   if (historicPips[ArraySize(historicPips)-1] < consolidatedPips){
+      //Print("++++++++++++++++++ loosingTooMuch - Sono sotto alla libreria ++++++++++++++++++++++");
+      return false;
+   }
+   
+   
+   loosablePips = historicPips[ArraySize(historicPips)-1] - consolidatedPips;
+
+   //scorro gli ordini per contare i pip che stanno facendo
+   for(int pos=0;pos<OrdersTotal();pos++)
+   {
+        if( (OrderSelect(pos,SELECT_BY_POS)==false)
+        || (OrderSymbol() != nomIndice)
+        || (OrderMagicNumber() != SIGNATURE) ) continue;
+        
+        // buy order
+        if ( OrderType() == 0)
+        {if (OrderProfit() < 0) loosingPips = loosingPips + (MarketInfo(nomIndice, MODE_BID) - OrderOpenPrice())/Point;}
+        
+        if ( OrderType() == 1)
+        {if (OrderProfit() < 0) loosingPips = loosingPips + (OrderOpenPrice() - MarketInfo(nomIndice, MODE_BID))/Point;}
+   }
+   
+   //Print("*******************loosingTooMuch - loosingPips/loosablePips="+loosingPips+"/"+loosablePips+" ************************");
+   
+   // se sto perdendo abbastanza per azzerare loosablePips, chiudo tutto
+   if (loosablePips + loosingPips <= 0)
+   {
+      Print("******************loosingTooMuch - chiudo tutto! *********************************"); 
+      return true;
+   }
+   
+   return false;
+
+}
+//-----------------end----------------------------------------+ 
+
+
+
+
+
+bool closeAllOrders(){
+
+   //scorro gli ordini per contare i pip che stanno facendo
+   for(int pos=0;pos<OrdersTotal();pos++)
+   {
+        if( (OrderSelect(pos,SELECT_BY_POS)==false)
+        || (OrderSymbol() != nomIndice)
+        || (OrderMagicNumber() != SIGNATURE) ) continue;
+        
+        // buy order
+        if (OrderType() == 0){
+         Print("================= closeAllOrders - Chiudo BUY "+OrderTicket()+" ==================");
+         closeDescription="closeAllOrders: Chiuso per regole di chiusura cumulative";
+         if (fermetureBuy(OrderTicket()) < 0) pos--;
+        }
+        
+        if (OrderType() == 1){
+         Print("================= closeAllOrders - Chiudo SELL "+OrderTicket()+" ==================");
+         closeDescription="closeAllOrders: Chiuso per regole di chiusura cumulative";
+         if(fermetureSell(OrderTicket()) < 0) pos--;
+        }
+        
+   }
+   return false;
+}
+
 
 
 //--------------- SIZE AUTOMATICA ----------------------------+ 
@@ -1338,7 +1454,9 @@ int commentaire()
             
             "\n Periods Base / Adaptive: ",Y3_POWER_LIB_maPeriod ," / ", adaptive_maPeriod,
             
-            "\n Next Order Size: ",setPower(POWER, LooseRecoveryRatio, WinRecoveryRatio),
+            "\n Next Order Size: ",setPower(POWER, LooseRecoveryRatio, WinRecoveryRatio, RecoveryStopper),
+
+            "\n Consolidator: ",consolidator(),
 
             
 //            "\n +-----------------------------   ",
