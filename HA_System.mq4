@@ -12,13 +12,16 @@
 // SL = 10 pips
 // In seguito si faranno tentativi con valori diversi
  
+//--------------------------+
+// BOT NAME AND VERSION
+//--------------------------+
+string bot_name = "HA System 0.3.1";
+string botSettings; //contiene i settaggi del Bot
 
 
 //--------Index name------+
-
 string nomIndice = "GER30"; //sovrascritto dopo in init()
- 
-
+                          
 //--------number of lots to trade--------------+
 extern string ext_bot_settings = "=============== Bot Settings ===============";
 extern int SIGNATURE = 0018000;
@@ -26,15 +29,16 @@ extern string COMMENT = "HA";
 extern string nameOfHistoryFile = "HA_System_HST_";
 
 extern string ext_trade_settings = "=============== Trade Settings ===============";
-extern double POWER = 20; 
-extern string startingHour = "6:00"; //startingHour: orario inizio attività
-extern string endingHour = "17:00"; //endingHour: orario di fine attività 
-extern int SL_added_pips = 2; // SL_added_pips: pip da aggiungere allo SL
-extern int LooseRecoveryRatio = 100; // Loose RecoveryRatio (%)
-extern int WinRecoveryRatio = -50; // Win RecoveryRatio (%)
-extern double RecoveryStopper = 0.5; // Recover Stopper (0.0 - 1.0)
-extern bool Consolidator_Active = false;
-extern bool LooseTooMuch_Acive = false;
+extern double POWER = 20;                                                              
+extern string startingHour = "6:00";   /*startingHour: orario inizio attività*/        
+extern string endingHour = "17:00";    /*endingHour: orario di fine attività*/         
+extern int SL_added_pips = 2;          /*SL_added_pips: pip da aggiungere allo SL*/    
+extern int LooseRecoveryRatio = 100;   /*Loose RecoveryRatio (%)*/                     
+extern int WinRecoveryRatio = -50;     /*Win RecoveryRatio (%)*/                       
+extern double RecoveryStopper = 0.5;   /*Recover Stopper (0.0 - 1.0)*/                 
+extern int nFast = 2;                  /*AMA nFast*/                                   
+bool Consolidator_Active = false;
+bool LooseTooMuch_Acive = false;
 
 extern string ext_web_server_settings = "=============== Web Server ===============";
 extern bool registerBars = true; //registerBars: registra le barre sul web server
@@ -45,8 +49,10 @@ extern bool sendEmailOnOrderOpen = false; //Manda una mail quando apre un ordine
 extern bool sendEmailOnOrderClose = false; //Manda una mail quando chiude un ordine
 
 extern string ext_test_settings = "=============== test Settings ===============";
-extern bool usePercentageRisk = false;        
-extern string simulationName = "";
+extern bool usePercentageRisk = false;                                                 
+extern string Notes = "";                                                     
+
+
 
 int Y3_POWER_LIB_maPeriod = 5;
 double TP_Multiplier = 1;              // imposta il rapporto rischio/rendimento. da 1:1 in su su TUTTI gli ordini
@@ -60,7 +66,6 @@ bool enableClassicTP = true;
 bool enableAutoProfitMultiplier = true;
 
 bool enableAdaptive_AMA = false;       //presente SOLO per compatibilità con la libreria Y3_POWER_LIB
-string bot_name = "HA System";
 
 
 //+------------------------------------------------------------------+
@@ -118,12 +123,12 @@ double atr, ARC, maxSAR, minSAR;
 datetime lastAnalizedBarTime;    // per eseguire alcuni controlli una sola volta per barra: inizializzato in init
 bool webBarDataSendedToServer;   // gestisce se inviare o no i dati iniziali di una barra al webServer
 int simulationID;            // serve per scrivere un ID univoco nella simulazione sul web server per distinguerle
-string simulationNamePrefix;
 
 //+--------------- Include ------------------------+
 
 //#include  "Y3_POWER_LIB.mqh"
-#include  "Y3_POWER_LIB_Recovery.mqh"
+//#include  "Y3_POWER_LIB_Recovery.mqh"
+#include  "Y3_POWER_LIB_Recovery_Swap.mqh"
 #include    "WebRequest.mqh"
 
 //+----------------------- end --------------------+
@@ -236,15 +241,19 @@ int init()
          simulationID = GetTickCount();      // generato SOLO in simulazione. Se <> null il web server registra l'ordine nella tabella SimulationsOrder, altrimenti in Orders (reali)
    }
 
-   
-   // costruisco un prefisso per la descrizione della simulazione
-   simulationNamePrefix =  "Lotti:+"+(string)POWER+"+"+
-                           "Added Pips:+"+(string)SL_added_pips+"+"+
-                           "LooseRecoveryRatio:+"+(string)LooseRecoveryRatio+"+-+WinRecoveryRatio:+"+(string)WinRecoveryRatio+"+-+"+
-                           "Recovery Stopper:+"+(string)RecoveryStopper+"+"+
-                           "Consolidator_Active:+" +(string)Consolidator_Active+";+"+
-                           "LooseTooMuch_Acive:+"  +(string)LooseTooMuch_Acive+";+";
-
+   //-------------------------------------------------------------------+
+   //      SETTAGGI DEL BOT PER LA REGISTRAZIONE SU WEBSERVER           |
+   //-------------------------------------------------------------------+
+   botSettings = "Lotti:+"+(string)POWER+",+";
+   botSettings += "startingHour:+"+(string)startingHour+",+";
+   botSettings += "endingHour:+"+(string)endingHour+",+";
+   botSettings += "SL_added_pips:+"+(string)SL_added_pips+",+";     
+   botSettings += "LooseRecoveryRatio:+"+(string)LooseRecoveryRatio+",+";
+   botSettings += "WinRecoveryRatio:+"+(string)WinRecoveryRatio+",+";
+   botSettings += "RecoveryStopper:+"+(string)RecoveryStopper+",+";
+   botSettings += "nFast:+"+(string)nFast+",+";
+   botSettings += "usePercentageRisk:+"+(string)usePercentageRisk+",+";
+   botSettings += "Spread:+"+(string)MarketInfo(nomIndice, MODE_SPREAD)+""; // ATTENZIONE !! ricordarsi che l'ultimo è senza virgola finale!!
 
    // test x l'invio di un ordine al webserver (cambiare il ticket perchè dopo un mese escono dalla history!)
    // bool test = webSendOpenOrder(18371722,3);
@@ -493,7 +502,7 @@ for(int pos=0;pos<OrdersTotal();pos++)
 
 //-----------------enter sell order----------------------------+
    // sellConditions array
-   if ((startTime <= tm) && (tm < endTime))                sellConditions[0] = true; 
+   if ((startTime <= tm) && (tm < endTime))                    sellConditions[0] = true; 
    if (haClose[1] < haOpen[1])                                 sellConditions[1] = true; //la barra HA precedente è BEAR
    if (MathAbs(haClose[1]-haOpen[1]) > 1*Point)                sellConditions[2] = true; //la barra precedente ha + di 1 punto tra apertura e chiusura
    if ((haClose[2] > haOpen[2]) && (haClose[3] > haOpen[3]))   sellConditions[3] = true; //le due barre precedenti a quella sono entrambe BULL
@@ -1301,7 +1310,7 @@ bool webSendOpenOrder(int tkt, int attempts = 3)
       
       // encoded strings
       string bot_name_encoded = bot_name; StringReplace(bot_name_encoded, " ", "+");
-      string simulationNameEncoded = simulationName; StringReplace(simulationNameEncoded, " ", "+");
+      string NotesEncoded = Notes; StringReplace(NotesEncoded, " ", "+");
       string orderType = "BUY";  if (OrderType()==1) orderType = "SELL";
       string tpMultiplier = "1";
       
@@ -1309,7 +1318,8 @@ bool webSendOpenOrder(int tkt, int attempts = 3)
       "accountID="            +(string)AccountNumber()+
       "&symbol="              +(string)OrderSymbol()+
       "&simulationID="        +(string)simulationID+
-      "&simulationNotes="      +(string)simulationNamePrefix+"+"+simulationNameEncoded+
+      "&botSettings="         +(string)botSettings+"+"+
+      "&simulationNotes="     +(string)NotesEncoded+
       "&systemName="          +bot_name_encoded+
       "&systemMagic="         +(string)SIGNATURE+
       "&orderTicket="         +(string)tkt+
@@ -1324,6 +1334,7 @@ bool webSendOpenOrder(int tkt, int attempts = 3)
       "&tpMultiplier="        +(string)tpPaolone+
       "&point="               +DoubleToString(MarketInfo(OrderSymbol(),MODE_POINT),5)+
       "&tickValue="           +(string)MarketInfo(OrderSymbol(),MODE_TICKVALUE)+
+      "&prevVolume="          +(string)Volume[1]+
       
       // aggiungere le informazioni di partenza se necessario
       "&openConditions="+

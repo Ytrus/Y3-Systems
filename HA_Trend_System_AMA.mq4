@@ -14,8 +14,14 @@
  
 
 
-//--------Index name------+
+//--------------------------+
+// BOT NAME AND VERSION
+//--------------------------+
+string bot_name = "HA Trend AMA System v3.0.1";
+string botSettings; //contiene i settaggi del Bot
 
+
+//--------Index name------+
 string nomIndice = "GER30"; //sovrascritto dopo in init()
  
 
@@ -33,6 +39,9 @@ extern int SL_added_pips = 2; // SL_added_pips: pip da aggiungere allo SL
 extern int LooseRecoveryRatio = 20; // Loose RecoveryRatio (%)
 extern int WinRecoveryRatio = 5; // Win RecoveryRatio (%)
 extern double RecoveryStopper = 0.5; // Recover Stopper (0.0 - 1.0)
+extern int nFast = 2;                  /*AMA nFast*/                                   
+bool Consolidator_Active = false;
+bool LooseTooMuch_Acive = false;
 
 double TP_Multiplier = 1; // imposta il rapporto rischio/rendimento. da 1:1 in su su TUTTI gli ordini
 double TP_Paolone_Multiplier = 3; //TP_Paolone_Multiplier: def 3
@@ -55,9 +64,7 @@ extern bool sendEmailOnOrderClose = false; //Manda una mail quando chiude un ord
 
 extern string ext_test_settings = "=============== test Settings ===============";
 extern bool usePercentageRisk = false;        
-extern string simulationName = "";
-
-string bot_name = "HA Trend AMA System";
+extern string Notes = "";
 
 
 bool enablePowerLIB = true;
@@ -124,8 +131,9 @@ string simulationNamePrefix;
 
 //+--------------- Include ------------------------+
 
-//#include    "Y3_POWER_LIB.mqh"
+//#include  "Y3_POWER_LIB.mqh"
 #include    "Y3_POWER_LIB_Recovery.mqh"
+//#include  "Y3_POWER_LIB_Recovery_Swap.mqh"
 #include    "WebRequest.mqh"
 
 //+----------------------- end --------------------+
@@ -240,13 +248,21 @@ int init()
    }
    
 
-   // costruisco un prefisso per la descrizione della simulazione
-   simulationNamePrefix =  "Lotti:+"+(string)POWER+"+"+
-                           "Added Pips:+"+(string)SL_added_pips+"+"+
-                           "maFilterPeriod:+"+(string)maFilterPeriod+"+"+
-                           "AMAnFast:+"+(string)AMAnFast+"+"+
-                           "LooseRecoveryRatio:+"+(string)LooseRecoveryRatio+"+-+WinRecoveryRatio:+"+(string)WinRecoveryRatio+"+-+"+
-                           "Recovery Stopper:+"+(string)RecoveryStopper+"+";
+   //-------------------------------------------------------------------+
+   //      SETTAGGI DEL BOT PER LA REGISTRAZIONE SU WEBSERVER           |
+   //-------------------------------------------------------------------+
+   botSettings = "Lotti:+"+(string)POWER+",+";
+   botSettings += "startingHour:+"+(string)startingHour+",+";
+   botSettings += "endingHour:+"+(string)endingHour+",+";
+   botSettings += "SL_added_pips:+"+(string)SL_added_pips+",+"; 
+   botSettings += "maFilterPeriod:+"+(string)maFilterPeriod+",+";
+   botSettings += "AMAnFast:+"+(string)AMAnFast+",+";  
+   botSettings += "LooseRecoveryRatio:+"+(string)LooseRecoveryRatio+",+";
+   botSettings += "WinRecoveryRatio:+"+(string)WinRecoveryRatio+",+";
+   botSettings += "RecoveryStopper:+"+(string)RecoveryStopper+",+";
+   botSettings += "nFast:+"+(string)nFast+",+";
+   botSettings += "usePercentageRisk:+"+(string)usePercentageRisk+",+";
+   botSettings += "Spread:+"+(string)MarketInfo(nomIndice, MODE_SPREAD)+""; // ATTENZIONE !! ricordarsi che l'ultimo è senza virgola finale!!
 
    
    // test x l'invio di un ordine al webserver (cambiare il ticket perchè dopo un mese escono dalla history!)
@@ -1222,7 +1238,7 @@ bool webSendOpenOrder(int tkt, int attempts = 3)
       
       // encoded strings
       string bot_name_encoded = bot_name; StringReplace(bot_name_encoded, " ", "+");
-      string simulationNameEncoded = simulationName; StringReplace(simulationNameEncoded, " ", "+");
+      string NotesEncoded = Notes; StringReplace(NotesEncoded, " ", "+");
       string orderType = "BUY";  if (OrderType()==1) orderType = "SELL";
       string tpMultiplier = "1";
       
@@ -1230,7 +1246,8 @@ bool webSendOpenOrder(int tkt, int attempts = 3)
       "accountID="            +(string)AccountNumber()+
       "&symbol="              +(string)OrderSymbol()+
       "&simulationID="        +(string)simulationID+
-      "&simulationNotes="      +(string)simulationNamePrefix+"+"+simulationNameEncoded+
+      "&botSettings="         +(string)botSettings+"+"+
+      "&simulationNotes="     +(string)NotesEncoded+
       "&systemName="          +bot_name_encoded+
       "&systemMagic="         +(string)SIGNATURE+
       "&orderTicket="         +(string)tkt+
@@ -1245,7 +1262,8 @@ bool webSendOpenOrder(int tkt, int attempts = 3)
       "&tpMultiplier="        +(string)tpPaolone+
       "&point="               +DoubleToString(MarketInfo(OrderSymbol(),MODE_POINT),5)+
       "&tickValue="           +(string)MarketInfo(OrderSymbol(),MODE_TICKVALUE)+
-      
+      "&prevVolume="          +(string)Volume[1]+
+
       // aggiungere le informazioni di partenza se necessario
       "&openConditions="+
       "Buy+Conditions:+0."    +(string)buyConditions[0]+"+1."+(string)buyConditions[1]+"+2."+(string)buyConditions[2]+"+3."+(string)buyConditions[3]+"+5."+(string)buyConditions[5]+"+6."+(string)buyConditions[6]+"+7."+(string)buyConditions[7]+"+8."+(string)buyConditions[8]+"+9."+(string)buyConditions[9]+"+10."+(string)buyConditions[10]+"; "+
