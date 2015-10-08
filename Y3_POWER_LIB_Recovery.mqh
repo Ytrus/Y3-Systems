@@ -291,7 +291,7 @@ int addOrderToHistory(int ticket){
    
    //calculate the moving averages on earned pips
    //macurrent=iMAOnArray(historicPips,0,adaptive_maPeriod,0,MODE_SMA,0); // media mobile con gaussiana sul periodo
-   macurrent=getAMA(historicPips); // AMA
+   macurrent=getAMA(historicPips, nFast); // AMA
    
    
    //maY3 ver.8
@@ -671,13 +671,12 @@ int getMaFilter(int maxMaValue){
 //   Calcolo dell'AMA da applicare alla libreria
 //------------------------------------------------+
 
-double getAMA(double inputArray[])
+double getAMA(double inputArray[], int nfast = 2)
   {
 
    if (ArraySize(inputArray) == 0) {Print("******* AMA *******: Array vuoto!!"); return -1;}
    
    int       periodAMA = 9;
-   int       nfast = 2;
    int       nslow = 30;
    double    G = 2.0;
    double    dK = 2.0; 
