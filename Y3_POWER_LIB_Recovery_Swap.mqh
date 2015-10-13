@@ -125,14 +125,15 @@ int initOrderHistory(string s){
 
 // --------------- add orders to history ----------------+
 int addOrderToHistory(int ticket){
+
    // se non lo faccio per qualche motivo lui lo considera già girato. Il motivo non lo trovo. E' successo alla relase 0.3.2
    ArraySetAsSeries(historicPips, false);
    ArraySetAsSeries(historicPipsMA, false);
-   
+
    int k = ArraySize(historicPips); //get array size
    //Print("addOrderToHistory - Array size: "+k);
    ArrayResize(historicPips,k+1,100000); //increment it by one to put in the new profit or loss in pips
-
+   
 
    double orderSize;
    
@@ -155,15 +156,15 @@ int addOrderToHistory(int ticket){
    else
       {Print("addOrderToHistory Error: ",GetLastError());}
 
-   if (k>0){
+   if (k>0)
     historicPips[k] = historicPips[k-1]+pips;
-   }
-   else{
-    historicPips[k] = pips;}
+   else
+    historicPips[k] = pips;
       
 
    //prepare the array as timeSeries
    ArraySetAsSeries(historicPips, true);
+   
 
    
    // ==============================
@@ -215,7 +216,7 @@ int addOrderToHistory(int ticket){
 
 */
     // ====== Fine Test con Deviazione Standard ============================
-/*           
+           
        
 
    for (int i=1; ((i<=11) && (i<=k)) ; i++){
@@ -223,6 +224,14 @@ int addOrderToHistory(int ticket){
       if (historicPips[i] <= historicPipsMA[i]) {
 
          
+         // test calcolo media libreria GAU ver.6
+/*        if (i <= 2) underTheMA += 1;
+         if ((3 <= i) && (i <= 4)) underTheMA += 2;
+         if ((5 <= i) && (i <= 6)) underTheMA += 3;
+         if ((7 <= i) && (i <= 8)) underTheMA += 2;
+         if ((9 <= i) && (i <= 10)) underTheMA += 1;
+
+*/
          // ==== GAU EVOLUTA ==== ver.7
          if (i == 1) underTheMA += 1;
          if (i == 2) underTheMA += 2;
@@ -235,6 +244,30 @@ int addOrderToHistory(int ticket){
          if (i == 9) underTheMA += 4;
          if (i == 10) underTheMA += 2;
          if (i == 11) underTheMA += 1;
+/*
+
+         // ==== GAU EVOLUTA ==== ver.8
+         if (i == 1) underTheMA += 1;
+         if (i == 2) underTheMA += 3;
+         if (i == 3) underTheMA += 6;
+         if (i == 4) underTheMA += 9;
+         if (i == 5) underTheMA += 6;
+         if (i == 6) underTheMA += 3;
+         if (i == 7) underTheMA += 1;
+
+
+
+         // ==== GAU EVOLUTA ==== ver.9
+         if (i == 1) underTheMA += 1;
+         if (i == 2) underTheMA += 3;
+         if (i == 3) underTheMA += 6;
+         if (i == 4) underTheMA += 9;
+         if (i == 5) underTheMA += 12;
+         if (i == 6) underTheMA += 9;
+         if (i == 7) underTheMA += 6;
+         if (i == 8) underTheMA += 3;
+         if (i == 9) underTheMA += 1;
+*/
          
        }
          
@@ -248,13 +281,16 @@ int addOrderToHistory(int ticket){
       // attenzione!!! in questo modo non sommo mai 1 o 2, 3 etc. Sommo minimo 6 solo quando underTheMA è almeno 6 (se Y3_maPeriod è 5)
       if (underTheMA > Y3_maPeriod) adaptive_maPeriod = Y3_maPeriod + underTheMA; 
       
+      // proviamo a sommare SEMPRE
+      //adaptive_maPeriod = Y3_maPeriod + underTheMA; 
+
       
       //adaptive_maPeriod non può mai superare il massimo numero di valori disponibili, altrimenti sarebbe impossibile calcolare la media
       if (adaptive_maPeriod > k) adaptive_maPeriod = k;
       
       
       }
-*/   
+   
    // =============== end ===========
    
    //calculate the moving averages on earned pips
@@ -324,6 +360,15 @@ double setPower(double originalPower, int LooseRatio, int WinRatio, double recSt
    double step = 0;              // costante da sommare o sottrarre ad ogni iterazione
    double loosefactor = 0;       // fattore finale da sommare alla dimensione in caso di perdite precedenti
    double winfactor = 0;         // fattore finale da sottrarre alla dimensione in caso di perdite precedenti
+
+
+   //Se l'ultimo ordine disponibile nella libreria è sotto, swappo loosefactor e winfactor
+   if (historicPips[0]<historicPipsMA[0]){
+      
+      double tmpRatio = LooseRatio;
+      LooseRatio = WinRatio;
+      WinRatio = tmpRatio;
+   }
 
    // calcolo lo step come percentuale della size originale
    double LooseStep = NormalizeDouble( (originalPower/100*LooseRatio), lotDigits);
@@ -413,7 +458,9 @@ double setPower(double originalPower, int LooseRatio, int WinRatio, double recSt
    { 
 
       //sotto alla lib riduco il potere del recovery
-      newPower = minLot+ NormalizeDouble(recStopper*(loosefactor+winfactor),lotDigits);
+      //newPower = minLot+ NormalizeDouble(recStopper*(loosefactor+winfactor),lotDigits);
+      //NO!! provo lo swapper, quindi non parto da minLot, ma da originalPower
+      newPower = originalPower+ NormalizeDouble(recStopper*(loosefactor+winfactor),lotDigits);
       if (newPower <= 0) newPower = minLot;
 
    }
@@ -422,8 +469,7 @@ double setPower(double originalPower, int LooseRatio, int WinRatio, double recSt
       newPower = originalPower+ loosefactor+winfactor;
       if (newPower <= 0) newPower = originalPower;
    }
-
-   
+      
 
 
    
@@ -495,7 +541,7 @@ int getMaFilter(int maxMaValue){
    // guardo gli ultimi n trades e per ogni perdente sottraggo 5 al maxMaValue
    
    if (enableAdaptive_AMA == false) return maxMaValue;  // Se non è attiva l'adattabilità del periodo dell'AMA, uso semplicemente il suo periodo base
-   
+      
    int i = 0;
    int sub = 0; //valore da sottrarre al periodo della MA, variabile o fisso
    int k = ArraySize(historicPips); //get array size
@@ -623,7 +669,7 @@ int getMaFilter(int maxMaValue){
    
    ArraySetAsSeries(historicPips, false);
    
-   result = result + maxMaValue; //dersione esclusiva per VER.6 - per tutte le altre cancellare
+   result = result + maxMaValue; //versione esclusiva per VER.6 - per tutte le altre cancellare
    if (result < maxMaValue) result = maxMaValue;
    return result;
    

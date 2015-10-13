@@ -15,7 +15,7 @@
 //--------------------------+
 // BOT NAME AND VERSION
 //--------------------------+
-string bot_name = "HA System 0.3.1";
+string bot_name = "HA System 0.3.2";
 string botSettings; //contiene i settaggi del Bot
 
 
@@ -30,13 +30,15 @@ extern string nameOfHistoryFile = "HA_System_HST_";
 
 extern string ext_trade_settings = "=============== Trade Settings ===============";
 extern double POWER = 20;                                                              
-extern string startingHour = "6:00";   /*startingHour: orario inizio attività*/        
-extern string endingHour = "17:00";    /*endingHour: orario di fine attività*/         
+extern string startingHour = "00:00";   /*startingHour: orario inizio attività*/        
+extern string endingHour = "23:59";    /*endingHour: orario di fine attività*/         
 extern int SL_added_pips = 2;          /*SL_added_pips: pip da aggiungere allo SL*/    
 extern int LooseRecoveryRatio = 100;   /*Loose RecoveryRatio (%)*/                     
 extern int WinRecoveryRatio = -50;     /*Win RecoveryRatio (%)*/                       
 extern double RecoveryStopper = 0.5;   /*Recover Stopper (0.0 - 1.0)*/                 
-extern int nFast = 2;                  /*AMA nFast*/                                   
+extern int nFast = 2;                  /*AMA nFast*/
+extern int min_SL_Distance = 0;        /*min. Stop Loss Distance*/
+extern string openHours = "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20";                            
 bool Consolidator_Active = false;
 bool LooseTooMuch_Acive = false;
 
@@ -112,6 +114,8 @@ double nearestMax, nearestMin; //minimo e massimo delle ultime 3 barre, per sape
 double min, max; //minimo e massimo di giornata, aggiornati ad ogni nuova barra
 double tpPaolone = 1; //usato nell'inserimento ordini, necessario per avere il valore dopo l'inserimento dell'ordine
 
+bool enabledHours[24]; // array con le singole ore in cui c'è indicato se tradare o no (true o false)
+
 
 bool buyConditions[20]; 
 bool sellConditions[20]; 
@@ -120,15 +124,17 @@ string closeDescription; // per sapere perchè ha chiuso un ordine e scriverlo su
 double atr, ARC, maxSAR, minSAR;   
 
 
-datetime lastAnalizedBarTime;    // per eseguire alcuni controlli una sola volta per barra: inizializzato in init
-bool webBarDataSendedToServer;   // gestisce se inviare o no i dati iniziali di una barra al webServer
-int simulationID;            // serve per scrivere un ID univoco nella simulazione sul web server per distinguerle
+datetime lastAnalizedBarTime;       // per eseguire alcuni controlli una sola volta per barra: inizializzato in init
+datetime blockedBy_getSLDistance_for_BUY;   // getSLDistance salva qui il Time[] dell'ultima barra bloccata da lui
+datetime blockedBy_getSLDistance_for_SELL;   // getSLDistance salva qui il Time[] dell'ultima barra bloccata da lui
+bool webBarDataSendedToServer;      // gestisce se inviare o no i dati iniziali di una barra al webServer
+int simulationID;                   // serve per scrivere un ID univoco nella simulazione sul web server per distinguerle
 
 //+--------------- Include ------------------------+
 
 //#include  "Y3_POWER_LIB.mqh"
-//#include  "Y3_POWER_LIB_Recovery.mqh"
-#include  "Y3_POWER_LIB_Recovery_Swap.mqh"
+#include  "Y3_POWER_LIB_Recovery.mqh"
+//#include  "Y3_POWER_LIB_Recovery_Swap.mqh"
 #include    "WebRequest.mqh"
 
 //+----------------------- end --------------------+
@@ -226,6 +232,10 @@ int init()
    // inizializzo lastAnalizedBarTime facendo finta che l'ultima barra analizzata sia la penultima
    lastAnalizedBarTime = Time[1];
 
+   // fingo che l'ultima barra bloccata sia la penultima, in modo da analizzare correttamente la prima barra di partenza
+   blockedBy_getSLDistance_for_BUY = Time[1];
+   blockedBy_getSLDistance_for_SELL = Time[1];
+   
    // per registrare i dati iniziali di questa barra
    webBarDataSendedToServer = false; 
 
@@ -252,8 +262,32 @@ int init()
    botSettings += "WinRecoveryRatio:+"+(string)WinRecoveryRatio+",+";
    botSettings += "RecoveryStopper:+"+(string)RecoveryStopper+",+";
    botSettings += "nFast:+"+(string)nFast+",+";
+   botSettings += "min_SL_Distance:+"+(string)min_SL_Distance+",+";
+   botSettings += "openHours:+"+openHours+",+";
    botSettings += "usePercentageRisk:+"+(string)usePercentageRisk+",+";
    botSettings += "Spread:+"+(string)MarketInfo(nomIndice, MODE_SPREAD)+""; // ATTENZIONE !! ricordarsi che l'ultimo è senza virgola finale!!
+
+   
+   
+   //-------------------------------------------------------------------+
+   //                 IMPOSTO LE ORE DI TRADING                         |
+   //-------------------------------------------------------------------+
+   
+   // creo un array temporaneo con le ore indicate dall'utente
+   string taResult[];
+   ushort sep=StringGetCharacter(",",0);
+   StringSplit(openHours,sep,taResult);
+
+   // in ogni ora metto true se ho quell'ora nell'array taResult
+   for (int i=0; i<ArraySize(enabledHours); i++){
+      enabledHours[i] = false;
+      for (int b=0; b<ArraySize(taResult); b++){
+         if ((int)taResult[b] == i) enabledHours[i] = true;
+      }
+      
+   }
+   Print(enabledHours[0]+","+enabledHours[1]+","+enabledHours[2]+","+enabledHours[3]+","+enabledHours[4]+","+enabledHours[5]+","+enabledHours[6]+","+enabledHours[7]+","+enabledHours[8]+","+enabledHours[9]+","+enabledHours[10]+","+enabledHours[11]+","+enabledHours[12]+","+enabledHours[13]+","+enabledHours[14]+","+enabledHours[15]+","+enabledHours[16]+","+enabledHours[17]+","+enabledHours[18]+","+enabledHours[19]+","+enabledHours[20]+","+enabledHours[21]+","+enabledHours[22]+","+enabledHours[23]);
+
 
    // test x l'invio di un ordine al webserver (cambiare il ticket perchè dopo un mese escono dalla history!)
    // bool test = webSendOpenOrder(18371722,3);
@@ -291,6 +325,10 @@ int deinit()
 
    // cambio lastAnalizedBarTime per essere sicuro che se rilanciato non consideri questa barra già analizzata
    lastAnalizedBarTime = Time[1];
+
+   // fingo che l'ultima barra bloccata sia la penultima, in modo da analizzare correttamente la prima barra di partenza
+   blockedBy_getSLDistance_for_BUY = Time[1];
+   blockedBy_getSLDistance_for_SELL = Time[1];
 
    // per registrare i dati iniziali di questa barra
    webBarDataSendedToServer = false; 
@@ -432,7 +470,9 @@ int paramD1()
    if (!existOpendedAndClosedOnThisBar(2))                     buyConditions[7] = true; // Se non ho 2 ordini aperti e chiusi in questa barra
    if (Low[0] > min)                                           buyConditions[8] = true; // solo se la barra attuale non è anche il minimo di giornata 
    if (!existOrderOnThisBar(0))                                buyConditions[9] = true; // se NON ho un ordine già aperto in questa barra (apre un solo ordine per ogni direzione)
-   if (existOrder(0) < 0)                                      buyConditions[10] = true; // non ho già un ordine aperto in questa direzione (apre un solo ordine per direzione)
+   if (getSLDistance("BUY", min_SL_Distance))                  buyConditions[10] = true; // lo SL è almeno distante quanto richiesto
+   if (enabledHours[Hour()] == true)                           buyConditions[11] = true; // A questa ora posso tradare
+   //if (existOrder(0) < 0)                                    buyConditions[12] = true; // non ho già un ordine aperto in questa direzione (apre un solo ordine per direzione)
    
    
    if(   (buyConditions[0]) 
@@ -445,7 +485,8 @@ int paramD1()
       && (buyConditions[7]) 
       && (buyConditions[8]) 
       && (buyConditions[9]) 
-      //&& (buyConditions[10]) 
+      && (buyConditions[10]) 
+      && (buyConditions[11]) 
       //&& (MathAbs(haOpen[1]-haClose[1]) > MathAbs(haHigh[1]-haLow[1])/2 ) //il corpo deve essere maggiore alla metà dell'ombra
    )
    {
@@ -512,7 +553,9 @@ for(int pos=0;pos<OrdersTotal();pos++)
    if (!existOpendedAndClosedOnThisBar(2))                     sellConditions[7] = true; // Se non ho 2 ordini aperti e chiusi in questa barra
    if (High[0] < max)                                          sellConditions[8] = true; // solo se la barra attuale non è anche il massimo di giornata 
    if (!existOrderOnThisBar(1))                                sellConditions[9] = true; // se NON ho un ordine già aperto in questa barra (apre più ordini in ogni direzione)
-   if (existOrder(1) < 0 )                                     sellConditions[10] = true;// non ho già un ordine attivo in questa direzione (apre un solo ordine per direzione)
+   if (getSLDistance("SELL", min_SL_Distance))                 sellConditions[10] = true; // lo SL è almeno distante quanto richiesto
+   if (enabledHours[Hour()] == true)                           sellConditions[11] = true; // A questa ora posso tradare
+   //if (existOrder(1) < 0 )                                   sellConditions[12] = true;// non ho già un ordine attivo in questa direzione (apre un solo ordine per direzione)
 
    if(   (sellConditions[0])  
       && (sellConditions[1]) 
@@ -524,7 +567,8 @@ for(int pos=0;pos<OrdersTotal();pos++)
       && (sellConditions[7]) 
       && (sellConditions[8]) 
       && (sellConditions[9]) 
-      //&& (sellConditions[10]) 
+      && (sellConditions[10]) 
+      && (sellConditions[11]) 
       //&& (MathAbs(haOpen[1]-haClose[1]) > MathAbs(haHigh[1]-haLow[1])/2 ) //il corpo deve essere maggiore alla metà dell'ombra
    )
    {
@@ -600,8 +644,8 @@ for(int pos=0;pos<OrdersTotal();pos++)
       
       // aggiungere le informazioni di partenza se necessario
       "&startingInfo="+
-      "Buy+Conditions:+0."    +(string)buyConditions[0]+"+1."+(string)buyConditions[1]+"+2."+(string)buyConditions[2]+"+3."+(string)buyConditions[3]+"+4."+(string)buyConditions[4]+"+5."+(string)buyConditions[5]+"+6."+(string)buyConditions[6]+"+7."+(string)buyConditions[7]+"+8."+(string)buyConditions[8]+"+9."+(string)buyConditions[9]+";+"+
-      "Sell+Conditions:+0."   +(string)sellConditions[0]+"+1."+(string)sellConditions[1]+"+2."+(string)sellConditions[2]+"+3."+(string)sellConditions[3]+"+4."+(string)sellConditions[4]+"+5."+(string)sellConditions[5]+"+6."+(string)sellConditions[6]+"+7."+(string)sellConditions[7]+"+8."+(string)sellConditions[8]+"+9."+(string)sellConditions[9]+";+"+
+      "Buy+Conditions:+0."    +(string)buyConditions[0]+"+1."+(string)buyConditions[1]+"+2."+(string)buyConditions[2]+"+3."+(string)buyConditions[3]+"+4."+(string)buyConditions[4]+"+5."+(string)buyConditions[5]+"+6."+(string)buyConditions[6]+"+7."+(string)buyConditions[7]+"+8."+(string)buyConditions[8]+"+9."+(string)buyConditions[9]+";+"+(string)buyConditions[10]+";+"+
+      "Sell+Conditions:+0."   +(string)sellConditions[0]+"+1."+(string)sellConditions[1]+"+2."+(string)sellConditions[2]+"+3."+(string)sellConditions[3]+"+4."+(string)sellConditions[4]+"+5."+(string)sellConditions[5]+"+6."+(string)sellConditions[6]+"+7."+(string)sellConditions[7]+"+8."+(string)sellConditions[8]+"+9."+(string)sellConditions[9]+";+"+(string)sellConditions[10]+";+"+
       "nearestMin:+"          +(string)nearestMin+";+"+
       "nearestMax:+"          +(string)nearestMax+";+"+
       "min:+"                 +(string)min+";+"+
@@ -889,6 +933,48 @@ int fermetureSell(int tkt)
 
 
 
+//-------------------------------------------------+
+//    VERIFICA DELLA DISTANZA DELLO STOP LOSS
+//-------------------------------------------------+
+bool getSLDistance(string ot, int minDistance){
+   
+   //Print("=========================== Time[0]: "+Time[0]+" - blockedBy_getSLDistance: "+ blockedBy_getSLDistance +" ===========================");
+   
+   //se questa barra è già stata scartata, restituisco false
+   if ( (ot =="BUY") && (iBarShift(nomIndice,0,blockedBy_getSLDistance_for_BUY,false) == 0) )
+   {//Print("********************** BUY --- QUESTA BARRA ("+Time[0]+") E' GIA STATA ANALIZZATA E SCARTATA: "+ blockedBy_getSLDistance +" *****************************"); 
+   return false;}
+
+   //se questa barra è già stata scartata, restituisco false
+   if ( (ot =="SELL") && (iBarShift(nomIndice,0,blockedBy_getSLDistance_for_SELL,false) == 0) )
+   {//Print("********************** SELL --- QUESTA BARRA ("+Time[0]+") E' GIA STATA ANALIZZATA E SCARTATA: "+ blockedBy_getSLDistance +" *****************************"); 
+   return false;}
+   
+      
+   int SL_Distance = 0;
+   // ordine buy
+   if (ot == "BUY"){SL_Distance   = (MarketInfo(nomIndice, MODE_ASK) - (min - (SL_added_pips*Point)))/Point;}
+   // ordine sell
+   if (ot == "SELL") {SL_Distance   = ((max + (SL_added_pips*Point)) - MarketInfo(nomIndice, MODE_BID))/Point;}
+   //Print("getSLDistance("+ot+"): "+(int)SL_Distance);
+   
+   if ((int)SL_Distance >= minDistance) {
+      return true;}
+   else{
+      if (ot == "BUY" ){
+         // in questa barra non devo PIU aprire trades BUY
+         blockedBy_getSLDistance_for_BUY = Time[0];
+         //Print("********************** BUY --- La barra delle "+ blockedBy_getSLDistance_for_BUY +" HA SL troppo corto *****************************");
+         }
+      
+      else {
+         // in questa barra non devo PIU aprire trades SELL
+         blockedBy_getSLDistance_for_SELL = Time[0];
+         //Print("********************** SELL --- La barra delle "+ blockedBy_getSLDistance_for_SELL +" HA SL troppo corto *****************************");
+      }
+      return false;
+   }
+}
 
 
 //------- VERIFICA ESISTENZA ORDINI APERTI ----------+
@@ -1391,8 +1477,8 @@ bool webSendCloseOrder(int tkt, int attempts = 3)
       orderPips = NormalizeDouble(orderPips/Point, Digits);
       
       int cPips = 0, cLib = 0;                  //pips cumulati e valore della libreria
-      if (ArraySize(historicPips) > 0) cPips    = historicPips[ArraySize(historicPips)-1];
-      if (ArraySize(historicPipsMA) > 0) cLib   = historicPipsMA[ArraySize(historicPipsMA)-1];
+      if (ArraySize(historicPips) > 0)          cPips  = historicPips[ArraySize(historicPips)-1];
+      if (ArraySize(historicPipsMA) > 0)        cLib   = historicPipsMA[ArraySize(historicPipsMA)-1];
       
       StringReplace(closeDescription, " ", "+");
       if (StringLen(closeDescription) < 1) closeDescription = "Nessuna+nota+disponibile";
@@ -1467,8 +1553,7 @@ int commentaire()
             
             "\n Next Order Size: ",setPower(POWER, LooseRecoveryRatio, WinRecoveryRatio, RecoveryStopper),
 
-            "\n Consolidator: ",consolidator(),
-
+            "\n Orari: ",openHours,
             
 //            "\n +-----------------------------   ",
 //            "\n BUY Conditions   : ",buyConditions[0],buyConditions[1],
