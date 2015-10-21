@@ -325,13 +325,22 @@ int addOrderToHistory(int ticket){
 // ---------------- SET POWER --------------------+
 double setPower(double originalPower, int LooseRatio, int WinRatio, double recStopper){
 
+   Print("******************* originalPower "+originalPower+" ******************************");
+
    // se la libreria è disattiva, restituisco la POWER originale
    if (enableLibrary==false) return originalPower;
 
    
    //prepare the array as timeSeries
+   ArraySetAsSeries(historicPips, false);
+   ArraySetAsSeries(historicPipsMA, false);
+
+
+   //prepare the array as timeSeries
    ArraySetAsSeries(historicPips, true);
    ArraySetAsSeries(historicPipsMA, true);
+
+
 
    double minLot = MarketInfo(nomIndice,MODE_MINLOT);
    
@@ -357,12 +366,29 @@ double setPower(double originalPower, int LooseRatio, int WinRatio, double recSt
 
    
    
-   double step = 0;              // costante da sommare o sottrarre ad ogni iterazione
    double loosefactor = 0;       // fattore finale da sommare alla dimensione in caso di perdite precedenti
    double winfactor = 0;         // fattore finale da sottrarre alla dimensione in caso di perdite precedenti
+   double stopper_under = 0;     // moltiplicatore da applicare se siamo sopra alla libreria
+   double stopper_over = 0;      // moltiplicatore (smorzatore) da applicare se siamo sotto alla libreria
 
 
-   //Se l'ultimo ordine disponibile nella libreria è sotto, swappo loosefactor e winfactor
+   // -----------------------------------------------------+
+   //                   AUTO STOPPER                       |
+   // -----------------------------------------------------+
+   if (ArraySize(historicPips) >=9 ){
+      for (int x=0; ((x<=ArraySize(historicPips)-2) && (x<5)); x++){
+         if (historicPips[x]<historicPipsMA[x]) stopper_under = stopper_under +0.2;
+         if (historicPips[x]>historicPipsMA[x]) stopper_over = stopper_over +0.2;// senza bug OCCHIO: con autoSize apre posizioni troppo grandi e va in margin call
+         //if (historicPips[x]<historicPipsMA[x]) stopper_under = stopper_over +0.2; //versione col bug che creava ottimi profitti inspiegabilmente
+      }
+   }
+   
+   //li normalizzo
+   stopper_under = NormalizeDouble(stopper_under, 2);
+   stopper_over = NormalizeDouble(stopper_over, 2);
+   
+         
+   //Se l'ultimo ordine disponibile nella libreria è sotto, swappo winRecovery e LooseRecovery
    if (historicPips[0]<historicPipsMA[0]){
       
       double tmpRatio = LooseRatio;
@@ -373,7 +399,6 @@ double setPower(double originalPower, int LooseRatio, int WinRatio, double recSt
    // calcolo lo step come percentuale della size originale
    double LooseStep = NormalizeDouble( (originalPower/100*LooseRatio), lotDigits);
    double WinStep = NormalizeDouble( (originalPower/100*WinRatio), lotDigits);
-
    
    // per ogni posizione consecutiva in perdita sommo LooseStep
    for (int x=0; x<=ArraySize(historicPips)-2; x++)
@@ -384,7 +409,6 @@ double setPower(double originalPower, int LooseRatio, int WinRatio, double recSt
          
          
          loosefactor = loosefactor + LooseStep;
-         
          // ---------------------------------------------------------+
          //   OPO - Open Orders
          // ---------------------------------------------------------+
@@ -451,23 +475,16 @@ double setPower(double originalPower, int LooseRatio, int WinRatio, double recSt
 
 
 
-   //-----------------------------------------+
-   // verifico se ci sono degli ordini aperti |
-   //-----------------------------------------+
    if (historicPips[0] < macurrent) // if performance goes under ema, limit the lot to min Lot Size
    { 
-
-      //sotto alla lib riduco il potere del recovery
-      //newPower = minLot+ NormalizeDouble(recStopper*(loosefactor+winfactor),lotDigits);
-      //NO!! provo lo swapper, quindi non parto da minLot, ma da originalPower
-      newPower = originalPower+ NormalizeDouble(recStopper*(loosefactor+winfactor),lotDigits);
+   
+      newPower = originalPower+ NormalizeDouble(stopper_under*(loosefactor+winfactor),lotDigits);
       if (newPower <= 0) newPower = minLot;
-
    }
    else
    {
-      newPower = originalPower+ loosefactor+winfactor;
-      if (newPower <= 0) newPower = originalPower;
+      newPower = originalPower+ NormalizeDouble(stopper_over*(loosefactor+winfactor), lotDigits);
+      if (newPower <= minLot) newPower = minLot;
    }
       
 
