@@ -14,7 +14,7 @@
 //--------------------------+
 // BOT NAME AND VERSION
 //--------------------------+
-string bot_name = "HA System 0.3.2";
+string bot_name = "HA System 0.3.2 SWAP 5";
 string botSettings; //contiene i settaggi del Bot
 
 
@@ -132,8 +132,8 @@ int simulationID;                   // serve per scrivere un ID univoco nella si
 //+--------------- Include ------------------------+
 
 //#include  "Y3_POWER_LIB.mqh"
-#include  "Y3_POWER_LIB_Recovery.mqh"
-//#include  "Y3_POWER_LIB_Recovery_Swap.mqh"
+//#include  "Y3_POWER_LIB_Recovery.mqh"
+#include  "Y3_POWER_LIB_Recovery_Swap.mqh"
 #include    "WebRequest.mqh"
 
 //+----------------------- end --------------------+
@@ -1357,8 +1357,7 @@ double getSize(int risk, double distance)
    
    distance = distance/Point; //la distanza deve sempre essere un intero
    
-   amountRisked = MathRound(amountRisked/numberOfOrders);
-   finalSize = amountRisked/distance;
+   //amountRisked = MathRound(amountRisked/numberOfOrders); // supporto multiordine, ormai default 1
    
    finalSize = amountRisked/(tickValue*distance);
    
@@ -1368,8 +1367,8 @@ double getSize(int risk, double distance)
    if (minLot == 0.01) finalSize = NormalizeDouble(finalSize,2);
    
    
-   //Print("getSize() - Risk="+(string)risk+" - Distamce="+(string)distance+" - amountRisked="+(string)amountRisked+" - finalSize="+(string)finalSize);
-   
+   //Print("getSize() - Risk="+(string)risk+" - Distance="+(string)distance+" - amountRisked="+(string)amountRisked+" - finalSize="+(string)finalSize);
+   if (finalSize < minLot) finalSize = minLot;
    return finalSize;
 
 }
@@ -1550,7 +1549,7 @@ int commentaire()
             
             "\n Periods Base / Adaptive: ",Y3_POWER_LIB_maPeriod ," / ", adaptive_maPeriod,
             
-            "\n Next Order Size: ",setPower(POWER, LooseRecoveryRatio, WinRecoveryRatio, RecoveryStopper),
+            //"\n Next Order Size: ",setPower(POWER, LooseRecoveryRatio, WinRecoveryRatio, RecoveryStopper),
 
             "\n Orari: ",openHours,
             
