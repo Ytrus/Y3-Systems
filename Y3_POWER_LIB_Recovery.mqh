@@ -292,6 +292,10 @@ double setPower(double originalPower, int LooseRatio, int WinRatio, double recSt
    // se la libreria è disattiva, restituisco la POWER originale
    if (enableLibrary==false) return originalPower;
 
+   //set the arrays as normal arrays
+   ArraySetAsSeries(historicPips, false);
+   ArraySetAsSeries(historicPipsMA, false);
+
    
    //prepare the array as timeSeries
    ArraySetAsSeries(historicPips, true);
@@ -305,7 +309,7 @@ double setPower(double originalPower, int LooseRatio, int WinRatio, double recSt
    // se ho un numero do trades inferiore al numero di trade analizzati dall'AMA, restituisco minLot
    if (ArraySize(historicPipsMA) < 9) return(minLot);
   
-   //calculate the moving averages on earned pips
+   //get the moving averages on earned pips
    macurrent = historicPipsMA[0];
    
    
@@ -328,7 +332,6 @@ double setPower(double originalPower, int LooseRatio, int WinRatio, double recSt
    // calcolo lo step come percentuale della size originale
    double LooseStep = NormalizeDouble( (originalPower/100*LooseRatio), lotDigits);
    double WinStep = NormalizeDouble( (originalPower/100*WinRatio), lotDigits);
-
    
    // per ogni posizione consecutiva in perdita sommo LooseStep
    for (int x=0; x<=ArraySize(historicPips)-2; x++)
@@ -375,7 +378,6 @@ double setPower(double originalPower, int LooseRatio, int WinRatio, double recSt
       {
 
             winfactor = winfactor - WinStep;
-
          
          // ---------------------------------------------------------+
          //   OPO - Open Orders
@@ -406,9 +408,7 @@ double setPower(double originalPower, int LooseRatio, int WinRatio, double recSt
 
 
 
-   //-----------------------------------------+
-   // verifico se ci sono degli ordini aperti |
-   //-----------------------------------------+
+
    if (historicPips[0] < macurrent) // if performance goes under ema, limit the lot to min Lot Size
    { 
 
