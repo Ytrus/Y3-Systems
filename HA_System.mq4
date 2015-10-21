@@ -14,7 +14,7 @@
 //--------------------------+
 // BOT NAME AND VERSION
 //--------------------------+
-string bot_name = "HA System 0.3.2 SWAP 5";
+string bot_name = "HA System 0.3.3";
 string botSettings; //contiene i settaggi del Bot
 
 
@@ -28,18 +28,18 @@ extern string COMMENT = "HA";
 extern string nameOfHistoryFile = "HA_System_HST_";
 
 extern string ext_trade_settings = "=============== Trade Settings ===============";
-extern double POWER = 20;                                                              
-extern string startingHour = "00:00";   /*startingHour: orario inizio attività*/        
-extern string endingHour = "23:59";    /*endingHour: orario di fine attività*/         
-extern int SL_added_pips = 2;          /*SL_added_pips: pip da aggiungere allo SL*/    
-extern int LooseRecoveryRatio = 100;   /*Loose RecoveryRatio (%)*/                     
-extern int WinRecoveryRatio = -50;     /*Win RecoveryRatio (%)*/                       
-extern double RecoveryStopper = 0.5;   /*Recover Stopper (0.0 - 1.0)*/                 
-extern int nFast = 2;                  /*AMA nFast*/
-extern int min_SL_Distance = 0;        /*min. Stop Loss Distance*/
+extern double POWER = 0.1;                                                              
+extern string startingHour = "00:00";           /*startingHour: orario inizio attività*/        
+extern string endingHour = "23:59";             /*endingHour: orario di fine attività*/         
+extern int SL_added_pips = 2;                   /*SL_added_pips: pip da aggiungere allo SL*/    
+extern int LooseRecoveryRatio = 100;            /*Loose RecoveryRatio (%)*/                     
+extern int WinRecoveryRatio = -50;              /*Win RecoveryRatio (%)*/                       
+extern double RecoveryStopper = 0.5;            /*Recover Stopper (0.0 - 1.0)*/                 
+extern int nFast = 2;                           /*AMA nFast*/
+extern int min_SL_Distance = 0;                 /*min. Stop Loss Distance*/
+extern int max_SL_Distance = 10000;             /*max. Stop Loss Distance*/
+extern int camebackProtectionPercentage = 10;   /*Cameback % Protection*/
 extern string openHours = "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20";                            
-bool Consolidator_Active = false;
-bool LooseTooMuch_Acive = false;
 
 extern string ext_web_server_settings = "=============== Web Server ===============";
 extern bool registerBars = true; //registerBars: registra le barre sul web server
@@ -132,8 +132,8 @@ int simulationID;                   // serve per scrivere un ID univoco nella si
 //+--------------- Include ------------------------+
 
 //#include  "Y3_POWER_LIB.mqh"
-//#include  "Y3_POWER_LIB_Recovery.mqh"
-#include  "Y3_POWER_LIB_Recovery_Swap.mqh"
+#include  "Y3_POWER_LIB_Recovery.mqh"
+//#include  "Y3_POWER_LIB_Recovery_Swap.mqh"
 #include    "WebRequest.mqh"
 
 //+----------------------- end --------------------+
@@ -262,9 +262,12 @@ int init()
    botSettings += "RecoveryStopper:+"+(string)RecoveryStopper+",+";
    botSettings += "nFast:+"+(string)nFast+",+";
    botSettings += "min_SL_Distance:+"+(string)min_SL_Distance+",+";
+   botSettings += "max_SL_Distance:+"+(string)max_SL_Distance+",+";
    botSettings += "openHours:+"+openHours+",+";
    botSettings += "usePercentageRisk:+"+(string)usePercentageRisk+",+";
+   botSettings += "camebackProtectionPercentage:+"+(string)camebackProtectionPercentage+",+";
    botSettings += "Spread:+"+(string)MarketInfo(nomIndice, MODE_SPREAD)+""; // ATTENZIONE !! ricordarsi che l'ultimo è senza virgola finale!!
+   
 
    
    
@@ -469,7 +472,7 @@ int paramD1()
    if (!existOpendedAndClosedOnThisBar(2))                     buyConditions[7] = true; // Se non ho 2 ordini aperti e chiusi in questa barra
    if (Low[0] > min)                                           buyConditions[8] = true; // solo se la barra attuale non è anche il minimo di giornata 
    if (!existOrderOnThisBar(0))                                buyConditions[9] = true; // se NON ho un ordine già aperto in questa barra (apre un solo ordine per ogni direzione)
-   if (getSLDistance("BUY", min_SL_Distance))                  buyConditions[10] = true; // lo SL è almeno distante quanto richiesto
+   if (getSLDistance("BUY", min_SL_Distance, max_SL_Distance)) buyConditions[10] = true; // lo SL è almeno distante quanto richiesto
    if (enabledHours[Hour()] == true)                           buyConditions[11] = true; // A questa ora posso tradare
    //if (existOrder(0) < 0)                                    buyConditions[12] = true; // non ho già un ordine aperto in questa direzione (apre un solo ordine per direzione)
    
@@ -519,7 +522,7 @@ for(int pos=0;pos<OrdersTotal();pos++)
      // Print("Trovato Ordine Buy da controllare : ",OrderTicket());
      
      //clausole di chiusura
-     if ((isCameBack(OrderTicket()))                                          // se ha raggiunto il primo target e torna indietro
+     if ((isCameBack(OrderTicket(), camebackProtectionPercentage))             // se ha raggiunto il primo target e torna indietro
        || (slReached(OrderTicket()))                                           // Raggiunto SL
        || (tpReached(OrderTicket()))                                           // Raggiunto TP
      )
@@ -552,7 +555,7 @@ for(int pos=0;pos<OrdersTotal();pos++)
    if (!existOpendedAndClosedOnThisBar(2))                     sellConditions[7] = true; // Se non ho 2 ordini aperti e chiusi in questa barra
    if (High[0] < max)                                          sellConditions[8] = true; // solo se la barra attuale non è anche il massimo di giornata 
    if (!existOrderOnThisBar(1))                                sellConditions[9] = true; // se NON ho un ordine già aperto in questa barra (apre più ordini in ogni direzione)
-   if (getSLDistance("SELL", min_SL_Distance))                 sellConditions[10] = true; // lo SL è almeno distante quanto richiesto
+   if (getSLDistance("SELL", min_SL_Distance, max_SL_Distance))sellConditions[10] = true; // lo SL è almeno distante quanto richiesto
    if (enabledHours[Hour()] == true)                           sellConditions[11] = true; // A questa ora posso tradare
    //if (existOrder(1) < 0 )                                   sellConditions[12] = true;// non ho già un ordine attivo in questa direzione (apre un solo ordine per direzione)
 
@@ -591,7 +594,7 @@ for(int pos=0;pos<OrdersTotal();pos++)
      //Print("Trovato Ordine Sell da controllare : ",OrderTicket());
      
      //clausole di chiusura
-     if ( (isCameBack(OrderTicket()))                                           // se ha raggiunto il primo target e torna indietro
+     if ( (isCameBack(OrderTicket(), camebackProtectionPercentage))             // se ha raggiunto il primo target e torna indietro
        || (slReached(OrderTicket()))                                            // Raggiunto SL
        || (tpReached(OrderTicket()))                                            // Raggiunto TP
        )
@@ -608,20 +611,6 @@ for(int pos=0;pos<OrdersTotal();pos++)
 //-----------------end---------------------------------------------+
 
 
-
-//-------------------Close all orders -----------------------------+
-   
-   // se sto perdendo i pip necessari a tornare a livello del consolidator, chiudo tutto
-   if (loosingTooMuch()){
-      closeAllOrders();
-   }
-   
-   //se sto vincendo abbastanza nel complesso (fissato a priori) chiudo tutto
-   /*
-   if (winningTooMuch()){
-      closeAllOrders();
-   }
-   */
 
    //-------------------------------------------------------+
    // scrivo sul webserver i dati iniziali di questa barra  |
@@ -649,9 +638,7 @@ for(int pos=0;pos<OrdersTotal();pos++)
       "nearestMax:+"          +(string)nearestMax+";+"+
       "min:+"                 +(string)min+";+"+
       "max:+"                 +(string)max+";+"+
-      "tollerance:+"          +(string)tollerance+";+"+
-      "Consolidator_Active:+" +(string)Consolidator_Active+";+"+
-      "LooseTooMuch_Acive:+"  +(string)LooseTooMuch_Acive+";+"
+      "tollerance:+"          +(string)tollerance+";+"
       ;
       
       // invio la richiesta al webServer
@@ -935,7 +922,7 @@ int fermetureSell(int tkt)
 //-------------------------------------------------+
 //    VERIFICA DELLA DISTANZA DELLO STOP LOSS
 //-------------------------------------------------+
-bool getSLDistance(string ot, int minDistance){
+bool getSLDistance(string ot, int minDistance, int maxDistance){
    
    //Print("=========================== Time[0]: "+Time[0]+" - blockedBy_getSLDistance: "+ blockedBy_getSLDistance +" ===========================");
    
@@ -957,7 +944,7 @@ bool getSLDistance(string ot, int minDistance){
    if (ot == "SELL") {SL_Distance   = ((max + (SL_added_pips*Point)) - MarketInfo(nomIndice, MODE_BID))/Point;}
    //Print("getSLDistance("+ot+"): "+(int)SL_Distance);
    
-   if ((int)SL_Distance >= minDistance) {
+   if (((int)SL_Distance >= minDistance) && ((int)SL_Distance < maxDistance)) {
       return true;}
    else{
       if (ot == "BUY" ){
@@ -1207,12 +1194,13 @@ bool tpReached(int tkt)
 
 //--- Verifica se un ordine torna indietro dopo aver visto un certo profitto ----------------------------+ 
 
-bool isCameBack(int tkt)
+bool isCameBack(int tkt, int protectionPercent)
 {
 
    int shift;
    double profit, max_, min_, hiddener = 0;
    bool result = false;
+   double protectionPips = 0;
    hiddener = 1000*Point; // gli SL sono mascheratti
    
    if (OrderSelect(tkt, SELECT_BY_TICKET)==true) 
@@ -1221,12 +1209,12 @@ bool isCameBack(int tkt)
       
       shift = iBarShift(nomIndice,0,OrderOpenTime(),false);
       profit = MathAbs(OrderOpenPrice() - OrderStopLoss()) - hiddener;  // tutti gli ordini di un gruppo hanno lo stesso rischio, che è uguale al primo TP
-      
+      protectionPips = NormalizeDouble(profit/100*protectionPercent, Digits); // calcolo i pip corrispondenti alla percentuale da proteggere
      
       if ((OrderType() == OP_BUY) && (shift > 0)) // buy order
       {
          max_ = High[iHighest(nomIndice,0,MODE_HIGH,shift,0)]; //Print("isCameBack BUY: profit="+profit+" -- max_="+max_+" -- shift="+shift);
-         if ( (max_ - OrderOpenPrice() >= profit) && (MarketInfo(nomIndice,MODE_BID) <= (OrderOpenPrice()+2*Point) ) )
+         if ( (max_ - OrderOpenPrice() >= profit) && (MarketInfo(nomIndice,MODE_BID) <= (OrderOpenPrice()+protectionPips) ) )
          {result = true; Print("Order Buy ", tkt, " is Coming Back: CHIUDO");}
       }
 
@@ -1234,7 +1222,7 @@ bool isCameBack(int tkt)
       if ((OrderType() == OP_SELL) && (shift > 0) ) // sell order
       {
          min_ = Low[iLowest(nomIndice,0,MODE_LOW,shift,0)]; //Print("isCameBack SELL: profit="+profit+" -- min_="+min_+" -- shift="+shift);
-         if ((OrderOpenPrice() - min_ >= profit) && (MarketInfo(nomIndice,MODE_BID) >= (OrderOpenPrice()-2*Point) ) )
+         if ((OrderOpenPrice() - min_ >= profit) && (MarketInfo(nomIndice,MODE_BID) >= (OrderOpenPrice()-protectionPips) ) )
          {result = true; Print("Order Sell ", tkt, " is Coming Back: CHIUDO");}
       }
        
@@ -1247,99 +1235,6 @@ bool isCameBack(int tkt)
 
 }
 //-----------------end----------------------------------------+ 
-
-
-
-
-
-//============================================================+
-//        LOOSING TOO MUCH
-// se il sistema sta, complessivamente, perdendo tanti pip
-// quanti ne mancano a raggiungere il valore dell'ultimo 
-// frattale del consolidator(), li chiudo tutti
-//============================================================+
-bool loosingTooMuch(){
-   
-   // se non è attivo, esco
-   if (LooseTooMuch_Acive == false) return false;
-   
-  
-   double loosingPips = 0;
-   double loosablePips = 0;
-   double consolidatedPips = 0;
-   
-   consolidatedPips = consolidator();
-   
-   // se non ho almeno 3 trades, esco
-   if (ArraySize(historicPips)<3) return false;
-   
-   // se sono già sotto al consolidator, esco
-   if (historicPips[ArraySize(historicPips)-1] < consolidatedPips){
-      //Print("++++++++++++++++++ loosingTooMuch - Sono sotto alla libreria ++++++++++++++++++++++");
-      return false;
-   }
-   
-   
-   loosablePips = historicPips[ArraySize(historicPips)-1] - consolidatedPips;
-
-   //scorro gli ordini per contare i pip che stanno facendo
-   for(int pos=0;pos<OrdersTotal();pos++)
-   {
-        if( (OrderSelect(pos,SELECT_BY_POS)==false)
-        || (OrderSymbol() != nomIndice)
-        || (OrderMagicNumber() != SIGNATURE) ) continue;
-        
-        // buy order
-        if ( OrderType() == 0)
-        {if (OrderProfit() < 0) loosingPips = loosingPips + (MarketInfo(nomIndice, MODE_BID) - OrderOpenPrice())/Point;}
-        
-        if ( OrderType() == 1)
-        {if (OrderProfit() < 0) loosingPips = loosingPips + (OrderOpenPrice() - MarketInfo(nomIndice, MODE_BID))/Point;}
-   }
-   
-   //Print("*******************loosingTooMuch - loosingPips/loosablePips="+loosingPips+"/"+loosablePips+" ************************");
-   
-   // se sto perdendo abbastanza per azzerare loosablePips, chiudo tutto
-   if (loosablePips + loosingPips <= 0)
-   {
-      Print("******************loosingTooMuch - chiudo tutto! *********************************"); 
-      return true;
-   }
-   
-   return false;
-
-}
-//-----------------end----------------------------------------+ 
-
-
-
-
-
-bool closeAllOrders(){
-
-   //scorro gli ordini per contare i pip che stanno facendo
-   for(int pos=0;pos<OrdersTotal();pos++)
-   {
-        if( (OrderSelect(pos,SELECT_BY_POS)==false)
-        || (OrderSymbol() != nomIndice)
-        || (OrderMagicNumber() != SIGNATURE) ) continue;
-        
-        // buy order
-        if (OrderType() == 0){
-         Print("================= closeAllOrders - Chiudo BUY "+OrderTicket()+" ==================");
-         closeDescription="closeAllOrders: Chiuso per regole di chiusura cumulative";
-         if (fermetureBuy(OrderTicket()) < 0) pos--;
-        }
-        
-        if (OrderType() == 1){
-         Print("================= closeAllOrders - Chiudo SELL "+OrderTicket()+" ==================");
-         closeDescription="closeAllOrders: Chiuso per regole di chiusura cumulative";
-         if(fermetureSell(OrderTicket()) < 0) pos--;
-        }
-        
-   }
-   return false;
-}
 
 
 
