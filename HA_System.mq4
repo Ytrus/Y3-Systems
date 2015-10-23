@@ -14,7 +14,7 @@
 //--------------------------+
 // BOT NAME AND VERSION
 //--------------------------+
-string bot_name = "HA System 0.3.3";
+string bot_name = "HA System 0.3.3 beta SL Mover";
 string botSettings; //contiene i settaggi del Bot
 
 
@@ -38,7 +38,8 @@ extern double RecoveryStopper = 0.5;            /*Recover Stopper (0.0 - 1.0)*/
 extern int nFast = 2;                           /*AMA nFast*/
 extern int min_SL_Distance = 0;                 /*min. Stop Loss Distance*/
 extern int max_SL_Distance = 10000;             /*max. Stop Loss Distance*/
-extern int camebackProtectionPercentage = 10;   /*Cameback % Protection*/
+extern int protectionStartDistance = 90;        /*Cameback % Start*/
+extern int protectionCloseDistance = 80;           /*Cameback % Protection*/
 extern string openHours = "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20";                            
 
 extern string ext_web_server_settings = "=============== Web Server ===============";
@@ -265,7 +266,8 @@ int init()
    botSettings += "max_SL_Distance:+"+(string)max_SL_Distance+",+";
    botSettings += "openHours:+"+openHours+",+";
    botSettings += "usePercentageRisk:+"+(string)usePercentageRisk+",+";
-   botSettings += "camebackProtectionPercentage:+"+(string)camebackProtectionPercentage+",+";
+   botSettings += "protectionStartDistance:+"+(string)protectionStartDistance+",+";
+   botSettings += "protectionCloseDistance:+"+(string)protectionCloseDistance+",+";
    botSettings += "Spread:+"+(string)MarketInfo(nomIndice, MODE_SPREAD)+""; // ATTENZIONE !! ricordarsi che l'ultimo è senza virgola finale!!
    
 
@@ -522,9 +524,10 @@ for(int pos=0;pos<OrdersTotal();pos++)
      // Print("Trovato Ordine Buy da controllare : ",OrderTicket());
      
      //clausole di chiusura
-     if ((isCameBack(OrderTicket(), camebackProtectionPercentage))             // se ha raggiunto il primo target e torna indietro
-       || (slReached(OrderTicket()))                                           // Raggiunto SL
-       || (tpReached(OrderTicket()))                                           // Raggiunto TP
+     if ((isCameBack_One(OrderTicket(), 0))                                                       // se dopo aver visto un profitto di 1:1 torna indietro
+       //|| (isCameBack_Two(OrderTicket(), protectionStartDistance, protectionCloseDistance))        // se ha raggiunto una certa percentuale di profitto e poi torna indietro
+       || (slReached(OrderTicket()))                                                               // Raggiunto SL
+       || (tpReached(OrderTicket()))                                                               // Raggiunto TP
      )
      {
       sortieBuy = OrderTicket();       
@@ -594,9 +597,10 @@ for(int pos=0;pos<OrdersTotal();pos++)
      //Print("Trovato Ordine Sell da controllare : ",OrderTicket());
      
      //clausole di chiusura
-     if ( (isCameBack(OrderTicket(), camebackProtectionPercentage))             // se ha raggiunto il primo target e torna indietro
-       || (slReached(OrderTicket()))                                            // Raggiunto SL
-       || (tpReached(OrderTicket()))                                            // Raggiunto TP
+     if ( (isCameBack_One(OrderTicket(), 0))                                                       // se dopo aver visto un profitto di 1:1 torna indietro
+       //|| (isCameBack_Two(OrderTicket(), protectionStartDistance, protectionCloseDistance))        // se ha raggiunto una certa percentuale di profitto e poi torna indietro
+       || (slReached(OrderTicket()))                                                               // Raggiunto SL
+       || (tpReached(OrderTicket()))                                                               // Raggiunto TP
        )
      {
       sortieSell = OrderTicket();       
@@ -1192,9 +1196,55 @@ bool tpReached(int tkt)
 
 
 
-//--- Verifica se un ordine torna indietro dopo aver visto un certo profitto ----------------------------+ 
 
-bool isCameBack(int tkt, int protectionPercent)
+//--- Verifica se un ordine torna indietro dopo aver visto un certo profitto ----------------------------+ 
+// ====================  VERSIONE CHE MANTIENE FISSA LA DISTANZA DELLO SL =====================================
+bool isCameBack_One(int tkt, int protectionPercent)
+{
+   // questa versione guarda la distanza originale dello SL dal punto di apertura e fa salire lo SL al salire del prezzo (o scendere per i sell)
+   int shift;
+   double profit, max_, min_, hiddener = 0;
+   bool result = false;
+   double protectionPips = 0;
+   hiddener = 1000*Point; // gli SL sono mascheratti
+   
+   if (OrderSelect(tkt, SELECT_BY_TICKET)==true) 
+   {
+      
+      shift = iBarShift(nomIndice,0,OrderOpenTime(),false);
+      profit = MathAbs(OrderOpenPrice() - OrderStopLoss()) - hiddener;  // distanza originale in pip tra apertura e SL
+     
+      if ((OrderType() == OP_BUY) && (shift > 0)) // buy order
+      {
+         max_ = High[iHighest(nomIndice,0,MODE_HIGH,shift,0)]; //Print("isCameBack BUY: profit="+profit+" -- max_="+max_+" -- shift="+shift);
+         if ( MarketInfo(nomIndice,MODE_BID) <= (max_ - profit) )
+         {result = true; Print("Order Buy ", tkt, " is Coming Back: CHIUDO");}
+      }
+
+ 
+      if ((OrderType() == OP_SELL) && (shift > 0) ) // sell order
+      {
+         min_ = Low[iLowest(nomIndice,0,MODE_LOW,shift,0)]; //Print("isCameBack SELL: profit="+profit+" -- min_="+min_+" -- shift="+shift);
+         if ( MarketInfo(nomIndice,MODE_BID) >= (min_ + profit) ) 
+         {result = true; Print("Order Sell ", tkt, " is Coming Back: CHIUDO");}
+      }
+       
+   }
+   
+   
+   if (result) closeDescription="isCameBack: Tornato indietro dopo aver visto un profitto pari al rischio";
+   
+   return result;
+
+}
+//-----------------end----------------------------------------+ 
+
+
+
+
+/*
+// ====================== VERSIONE ORIGINALE ====================================
+bool isCameBack_One(int tkt, int protectionPercent)
 {
 
    int shift;
@@ -1235,6 +1285,53 @@ bool isCameBack(int tkt, int protectionPercent)
 
 }
 //-----------------end----------------------------------------+ 
+*/
+
+
+bool isCameBack_Two(int tkt,int protectionStart, int protectionClose)
+{
+   // protectionStart: la percentuale di profitto a cui si attiva il protettore
+   // protectionClose: la percentuale che viene protetta, dopo aver raggiunto protectionStart
+
+   int shift;
+   double profit, max_, min_, hiddener = 0;
+   bool result = false;
+   double activationDistance = 0;
+   double closeDistance = 0;
+   hiddener = 1000*Point; // gli SL sono mascheratti
+   
+   if (OrderSelect(tkt, SELECT_BY_TICKET)==true) 
+   {
+      //se questo ordine ha visto sulla carta un profitto pari al rischio (profit), quando torna indietro lo chiudo a brake even
+      
+      shift = iBarShift(nomIndice,0,OrderOpenTime(),false);
+      profit = MathAbs(OrderOpenPrice() - OrderTakeProfit()) - hiddener;         // Guardo la distanza del TP per proteggerne una percentuale
+      activationDistance = NormalizeDouble(profit/100*protectionStart, Digits);  // distanza a cui iniziare a proteggere la posizione, in pips
+      closeDistance = NormalizeDouble(profit/100*protectionClose, Digits);       // distanza dello stopProfit, in pips
+     
+      if ((OrderType() == OP_BUY) && (shift > 0)) // buy order
+      {
+         max_ = High[iHighest(nomIndice,0,MODE_HIGH,shift,0)]; //Print("isCameBack BUY: profit="+profit+" -- max_="+max_+" -- shift="+shift);
+         if ( (max_ - OrderOpenPrice() >= activationDistance) && (MarketInfo(nomIndice,MODE_BID) <= (OrderOpenPrice()+closeDistance) ) )
+         {result = true; Print("Order Buy ", tkt, " is Coming Back: CHIUDO");}
+      }
+
+ 
+      if ((OrderType() == OP_SELL) && (shift > 0) ) // sell order
+      {
+         min_ = Low[iLowest(nomIndice,0,MODE_LOW,shift,0)]; //Print("isCameBack SELL: profit="+profit+" -- min_="+min_+" -- shift="+shift);
+         if ((OrderOpenPrice() - min_ >= activationDistance) && (MarketInfo(nomIndice,MODE_BID) >= (OrderOpenPrice()-closeDistance) ) )
+         {result = true; Print("Order Sell ", tkt, " is Coming Back: CHIUDO");}
+      }
+       
+   }
+   
+   
+   if (result) closeDescription="isCameBack: Tornato indietro dopo aver visto un profitto pari al rischio";
+   
+   return result;
+
+}
 
 
 
