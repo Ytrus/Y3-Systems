@@ -474,7 +474,6 @@ double setPower(double originalPower, int LooseRatio, int WinRatio, double recSt
 
 
 
-
    if (historicPips[0] < macurrent) // if performance goes under ema, limit the lot to min Lot Size
    { 
    
@@ -776,38 +775,7 @@ double getAMA(double inputArray[], int nfast = 2)
 
 
 
-// =================================================+
-//                  CONSOLIDATOR                    |
-// =================================================+
-double consolidator(){
-
-   int trades = ArraySize(historicPips)-1; //numero di trades presenti nell'array, già sottratto di uno per usarlo nei conteggi
-   double highestDownFractal = 0;
-
-
-   // Se non ho almeno 10 trade, non uso il consolidator
-   if (trades < 3) return 0;
-   
-
-   // scorro i trades per trovare i picchi inferiori e salvo il più alto
-   for (int i=1; i<trades; i++){
-      
-      // se ho un frattale down me lo salvo in highestDownFractal
-      if ( (historicPips[i-1]>historicPips[i]) && (historicPips[i]<historicPips[i+1]) ){
-         
-         //se il valore di historicPipsMA[i] è superiore all'attuale valore di highestDownFractal, prendo il nuovo valore
-         if (historicPips[i] > highestDownFractal) highestDownFractal = historicPips[i];
-         
-         
-      }
-   }
-   
-   return highestDownFractal;
-
-
-}
 
 
 
-// ------------------- end -----------------------+
 
