@@ -14,7 +14,7 @@
 //--------------------------+
 // BOT NAME AND VERSION
 //--------------------------+
-string bot_name = "HA System 0.3.3 beta SL Mover";
+string bot_name = "HA System 0.3.4 BETA SLmover 0";
 string botSettings; //contiene i settaggi del Bot
 
 
@@ -1198,7 +1198,7 @@ bool tpReached(int tkt)
 
 
 //--- Verifica se un ordine torna indietro dopo aver visto un certo profitto ----------------------------+ 
-// ====================  VERSIONE CHE MANTIENE FISSA LA DISTANZA DELLO SL =====================================
+// ====================  VERSIONE CHE MANTIENE FISSA LA DISTANZA DELLO SL FINO A ZERO =====================================
 bool isCameBack_One(int tkt, int protectionPercent)
 {
    // questa versione guarda la distanza originale dello SL dal punto di apertura e fa salire lo SL al salire del prezzo (o scendere per i sell)
@@ -1217,7 +1217,7 @@ bool isCameBack_One(int tkt, int protectionPercent)
       if ((OrderType() == OP_BUY) && (shift > 0)) // buy order
       {
          max_ = High[iHighest(nomIndice,0,MODE_HIGH,shift,0)]; //Print("isCameBack BUY: profit="+profit+" -- max_="+max_+" -- shift="+shift);
-         if ( MarketInfo(nomIndice,MODE_BID) <= (max_ - profit) )
+         if ( MarketInfo(nomIndice,MODE_BID) <= MathMin((max_ - profit),OrderOpenPrice()) )
          {result = true; Print("Order Buy ", tkt, " is Coming Back: CHIUDO");}
       }
 
@@ -1225,7 +1225,7 @@ bool isCameBack_One(int tkt, int protectionPercent)
       if ((OrderType() == OP_SELL) && (shift > 0) ) // sell order
       {
          min_ = Low[iLowest(nomIndice,0,MODE_LOW,shift,0)]; //Print("isCameBack SELL: profit="+profit+" -- min_="+min_+" -- shift="+shift);
-         if ( MarketInfo(nomIndice,MODE_BID) >= (min_ + profit) ) 
+         if ( MarketInfo(nomIndice,MODE_BID) >= MathMax((min_ + profit), OrderOpenPrice()) ) 
          {result = true; Print("Order Sell ", tkt, " is Coming Back: CHIUDO");}
       }
        
