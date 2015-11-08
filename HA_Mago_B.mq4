@@ -535,6 +535,7 @@ int paramD1()
       && (buyConditions[7]) 
       //&& (buyConditions[8]) 
       //&& (buyConditions[9])       
+      && (buyConditions[10])       
    )
    {
          entreeBuy = true; 
