@@ -14,7 +14,7 @@
 //--------------------------+
 // BOT NAME AND VERSION
 //--------------------------+
-string bot_name = "Mago 0.3.312 "; // Inserito filtro [10] per impedire acquisti fuori dalle Bande di Bollinger
+string bot_name = "Mago 0.3.313 "; // Cambiata condizione ingresso: una delle DUE barre precedenti trapassa la Bollinger Band
 string botSettings; //contiene i settaggi del Bot
 
 
@@ -496,7 +496,8 @@ int paramD1()
    // buyConditions array
    
    
-   if (Low[1] < lowerBand[1])                                  buyConditions[0] = true;   // La barra precedente ha il minimo sotto alla barra inferiore di bollinger
+   //if (Low[1] < lowerBand[1])                                  buyConditions[0] = true;   // La barra precedente ha il minimo sotto alla barra inferiore di bollinger
+   if ((Low[1] < lowerBand[1]) || (Low[2] < lowerBand[2]))     buyConditions[0] = true;   // La barra precedente o quella prima ha il minimo sotto alla barra inferiore di bollinger
    if (Close[0] > High[1])                                     buyConditions[1] = true;   // il prezzo sale oltre al massimo della barra precedente
    if ( (Close[0] < midBand[0]) )                              buyConditions[2] = true;   // il prezzo attuale è sotto alla middle band di Bollinger
    if (!existOrderOnThisBar(0))                                buyConditions[3] = true;   // se NON ho un ordine già aperto in questa barra (apre un solo ordine per ogni direzione)
@@ -507,7 +508,8 @@ int paramD1()
    //if (existOrder(0) < 0)                                    buyConditions[8] = true;   // non ho già un ordine aperto in questa direzione (apre un solo ordine per direzione)
    //if ((Close[0] < trendUp) && (trendUp != EMPTY_VALUE))     buyConditions[9] = true;  // Solo se il trend daily è UP - CON BUG
    if ((Close[0] > trendUp) && (trendUp != EMPTY_VALUE))       buyConditions[9] = true;  // Solo se il trend daily è UP - SENZA BUG
-   if (Close[0] < upperband[0])                                buyConditions[10] = true;    // Non sono salito oltre la upperBand
+   // if (Close[0] < upperband[0])                                buyConditions[10] = true;    // Non sono salito oltre la upperBand - abbastanza inconcludente nel 2010
+   
 
    /*
    if ((startTime <= tm) && (tm < endTime))                    buyConditions[0] = true;
@@ -535,7 +537,7 @@ int paramD1()
       && (buyConditions[7]) 
       //&& (buyConditions[8]) 
       //&& (buyConditions[9])       
-      && (buyConditions[10])       
+      //&& (buyConditions[10])       
    )
    {
          entreeBuy = true; 
@@ -592,7 +594,8 @@ for(int pos=0;pos<OrdersTotal();pos++)
 
 //-----------------enter sell order----------------------------+
    // sellConditions array
-   if (High[1] > upperband[1])                                 sellConditions[0] = true;     // La barra precedente ha il massimo sopra alla barra superiore di bollinger
+   //if (High[1] > upperband[1])                               sellConditions[0] = true;     // La barra precedente ha il massimo sopra alla barra superiore di bollinger
+   if ((High[1] > upperband[1]) || (High[2] > upperband[2]))   sellConditions[0] = true;     // La barra precedente o quella prima ha il massimo sopra alla barra superiore di bollinger
    if (Close[0] < Low[1])                                      sellConditions[1] = true;     // il prezzo scende oltre al minimo della barra precedente
    if (Close[0] > midBand[0])                                  sellConditions[2] = true;     // il prezzo attuale è sopra alla middle band di Bollinger
    if (!existOrderOnThisBar(1))                                sellConditions[3] = true;     // se NON ho un ordine già aperto in questa barra (apre più ordini in ogni direzione)
@@ -603,7 +606,7 @@ for(int pos=0;pos<OrdersTotal();pos++)
    //if (existOrder(1) < 0 )                                   sellConditions[8] = true;     // non ho già un ordine attivo in questa direzione (apre un solo ordine per direzione)
    if ((Close[0] > trendDown) && (trendDown != EMPTY_VALUE))   sellConditions[9] = true;     // Solo se il trend daily è DOWN - CON BUG
    //if ((Close[0] < trendDown) && (trendDown != EMPTY_VALUE))   sellConditions[9] = true;   // Solo se il trend daily è DOWN - SENZA BUG
-   if (Close[0] > lowerBand[0])                                sellConditions[10] = true;    // Non sono sceso oltre la lowerBand
+   //if (Close[0] > lowerBand[0])                                sellConditions[10] = true;    // Non sono sceso oltre la lowerBand - abbastanza inconcludente nel 2010
 
 
    /*
@@ -632,7 +635,7 @@ for(int pos=0;pos<OrdersTotal();pos++)
       && (sellConditions[7]) 
       //&& (sellConditions[8])
       //&& (sellConditions[9])
-      && (sellConditions[10]) 
+      //&& (sellConditions[10]) 
       
    )
    {
