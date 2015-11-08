@@ -14,7 +14,7 @@
 //--------------------------+
 // BOT NAME AND VERSION
 //--------------------------+
-string bot_name = "Mago 0.3.313 "; // Cambiata condizione ingresso: una delle DUE barre precedenti trapassa la Bollinger Band
+string bot_name = "Mago 0.3.314 "; // Envelope filter
 string botSettings; //contiene i settaggi del Bot
 
 
@@ -113,6 +113,7 @@ double tollerance; // tolleranza in pip della distanza dai massimi e minimi per 
 double haOpen[10], haClose[10], haHigh[10], haLow[10]; // arrays con i valori delle Haiken Ashi
 double haOpenM15[10], haCloseM15[10], haHighM15[10], haLowM15[10]; // arrays con i valori delle Haiken Ashi sul grafico a 15M
 double midBand[10], lowerBand[10], upperband[10]; // valori di bollinger nelle ultime 10 barre
+double upperEnvelope, lowerEnvelope;
 double nearestMax, nearestMin; //minimo e massimo delle ultime 3 barre, per sapere se il reverse è tradabile
 double min, max; //minimo e massimo di giornata, aggiornati ad ogni nuova barra
 double tpPaolone = 1; //usato nell'inserimento ordini, necessario per avere il valore dopo l'inserimento dell'ordine
@@ -491,13 +492,17 @@ int paramD1()
     trendDown = iCustom(nomIndice,slowerPeriod,"downloads\\SuperTrend",SuperTrend,false,14,14,14,14,14,14,14,14,14,1,0);
     
     
+    // PROVA CON ENVELOPES 14
+    upperEnvelope = iEnvelopes(nomIndice,PERIOD_CURRENT,SuperTrend,MODE_EMA,0,PRICE_MEDIAN,0.2,MODE_UPPER,0);
+    lowerEnvelope = iEnvelopes(nomIndice,PERIOD_CURRENT,SuperTrend,MODE_EMA,0,PRICE_MEDIAN,0.2,MODE_LOWER,0);
+    
+    
 //-----------------enter buy order---------------------------+
 
    // buyConditions array
    
    
-   //if (Low[1] < lowerBand[1])                                  buyConditions[0] = true;   // La barra precedente ha il minimo sotto alla barra inferiore di bollinger
-   if ((Low[1] < lowerBand[1]) || ((Low[2] < lowerBand[2]) && (High[1] < High[2]) ))     buyConditions[0] = true;   // La barra precedente o quella prima ha il minimo sotto alla barra inferiore di bollinger. 1 non deve avere sfondato 2, se 2 tocca bollinger ed 1 no
+   if (Low[1] < lowerBand[1])                                  buyConditions[0] = true;   // La barra precedente ha il minimo sotto alla barra inferiore di bollinger
    if (Close[0] > High[1])                                     buyConditions[1] = true;   // il prezzo sale oltre al massimo della barra precedente
    if ( (Close[0] < midBand[0]) )                              buyConditions[2] = true;   // il prezzo attuale è sotto alla middle band di Bollinger
    if (!existOrderOnThisBar(0))                                buyConditions[3] = true;   // se NON ho un ordine già aperto in questa barra (apre un solo ordine per ogni direzione)
@@ -506,26 +511,12 @@ int paramD1()
    if (isGoingUpAndDown())                                     buyConditions[6] = true;   // se almeno una delle ultime 10 barre chiudeva sopra a midBand (sto zigzagando)
    if (!existOpendedAndClosedOnThisBar(1))                     buyConditions[7] = true;   // Se non ho 1 ordine aperto e chiuso in questa barra
    //if (existOrder(0) < 0)                                    buyConditions[8] = true;   // non ho già un ordine aperto in questa direzione (apre un solo ordine per direzione)
-   //if ((Close[0] < trendUp) && (trendUp != EMPTY_VALUE))     buyConditions[9] = true;  // Solo se il trend daily è UP - CON BUG
-   if ((Close[0] > trendUp) && (trendUp != EMPTY_VALUE))       buyConditions[9] = true;  // Solo se il trend daily è UP - SENZA BUG
-   // if (Close[0] < upperband[0])                                buyConditions[10] = true;    // Non sono salito oltre la upperBand - abbastanza inconcludente nel 2010
+   //if ((Close[0] < trendUp) && (trendUp != EMPTY_VALUE))     buyConditions[9] = true;   // Solo se il trend daily è UP - CON BUG
+   if ((Close[0] > trendUp) && (trendUp != EMPTY_VALUE))       buyConditions[9] = true;   // Solo se il trend daily è UP - SENZA BUG
+   // if (Close[0] < upperband[0])                             buyConditions[10] = true;  // Non sono salito oltre la upperBand - abbastanza inconcludente nel 2010
+   if (Close[0] > lowerEnvelope)                               buyConditions[11] = true;  // Solo se non scende sotto al lower envelope
    
 
-   /*
-   if ((startTime <= tm) && (tm < endTime))                    buyConditions[0] = true;
-   if (haClose[1] > haOpen[1])                                 buyConditions[1] = true; //la barra HA precedente è BULL
-   if (MathAbs(haClose[1]-haOpen[1]) > 1*Point)                buyConditions[2] = true; //la barra precedente ha + di 1 punto tra apertura e chiusura
-   if ((haClose[2] < haOpen[2]) && (haClose[3] < haOpen[3]))   buyConditions[3] = true; //le due barre precedenti a quella sono entrambe BEAR
-   if (nearestMin < min+tollerance)                            buyConditions[4] = true; //il minimo delle ultime 3 barre era vicino al minimo assoluto della giornata
-   if (MarketInfo(nomIndice,MODE_BID) >= min)                  buyConditions[5] = true; // se il prezzo sta scendendo non devo rientrare (mi ha già buttato fuori quando ho toccato min)
-   if (MarketInfo(nomIndice,MODE_BID) < upperband)             buyConditions[6] = true; // non devo essere oltre la banda superiore
-   if (!existOpendedAndClosedOnThisBar(2))                     buyConditions[7] = true; // Se non ho 2 ordini aperti e chiusi in questa barra
-   if (Low[0] > min)                                           buyConditions[8] = true; // solo se la barra attuale non è anche il minimo di giornata 
-   if (!existOrderOnThisBar(0))                                buyConditions[9] = true; // se NON ho un ordine già aperto in questa barra (apre un solo ordine per ogni direzione)
-   if (getSLDistance("BUY", min_SL_Distance, max_SL_Distance)) buyConditions[10] = true; // lo SL è almeno distante quanto richiesto
-   if (enabledHours[Hour()] == true)                           buyConditions[11] = true; // A questa ora posso tradare
-   //if (existOrder(0) < 0)                                    buyConditions[12] = true; // non ho già un ordine aperto in questa direzione (apre un solo ordine per direzione)
-   */
    
    if(   (buyConditions[0]) 
       && (buyConditions[1]) 
@@ -538,6 +529,7 @@ int paramD1()
       //&& (buyConditions[8]) 
       //&& (buyConditions[9])       
       //&& (buyConditions[10])       
+      && (buyConditions[11])
    )
    {
          entreeBuy = true; 
@@ -594,8 +586,7 @@ for(int pos=0;pos<OrdersTotal();pos++)
 
 //-----------------enter sell order----------------------------+
    // sellConditions array
-   //if (High[1] > upperband[1])                               sellConditions[0] = true;     // La barra precedente ha il massimo sopra alla barra superiore di bollinger
-   if ((High[1] > upperband[1]) || ((High[2] > upperband[2]) && (Low[1] > Low[2])))   sellConditions[0] = true;     // La barra precedente o quella prima ha il massimo sopra alla barra superiore di bollinger. Low 1 non deve avere sfondato 2, se due tocca bollinger ed 1 no.
+   if (High[1] > upperband[1])                               sellConditions[0] = true;       // La barra precedente ha il massimo sopra alla barra superiore di bollinger
    if (Close[0] < Low[1])                                      sellConditions[1] = true;     // il prezzo scende oltre al minimo della barra precedente
    if (Close[0] > midBand[0])                                  sellConditions[2] = true;     // il prezzo attuale è sopra alla middle band di Bollinger
    if (!existOrderOnThisBar(1))                                sellConditions[3] = true;     // se NON ho un ordine già aperto in questa barra (apre più ordini in ogni direzione)
@@ -606,24 +597,9 @@ for(int pos=0;pos<OrdersTotal();pos++)
    //if (existOrder(1) < 0 )                                   sellConditions[8] = true;     // non ho già un ordine attivo in questa direzione (apre un solo ordine per direzione)
    if ((Close[0] > trendDown) && (trendDown != EMPTY_VALUE))   sellConditions[9] = true;     // Solo se il trend daily è DOWN - CON BUG
    //if ((Close[0] < trendDown) && (trendDown != EMPTY_VALUE))   sellConditions[9] = true;   // Solo se il trend daily è DOWN - SENZA BUG
-   //if (Close[0] > lowerBand[0])                                sellConditions[10] = true;    // Non sono sceso oltre la lowerBand - abbastanza inconcludente nel 2010
+   //if (Close[0] > lowerBand[0])                                sellConditions[10] = true;  // Non sono sceso oltre la lowerBand - abbastanza inconcludente nel 2010
+   if (Close[0] < upperEnvelope)                               sellConditions[11] = true;    // Solo se non sale oltre all'upper envelope
 
-
-   /*
-   if ((startTime <= tm) && (tm < endTime))                    sellConditions[0] = true; 
-   if (haClose[1] < haOpen[1])                                 sellConditions[1] = true; //la barra HA precedente è BEAR
-   if (MathAbs(haClose[1]-haOpen[1]) > 1*Point)                sellConditions[2] = true; //la barra precedente ha + di 1 punto tra apertura e chiusura
-   if ((haClose[2] > haOpen[2]) && (haClose[3] > haOpen[3]))   sellConditions[3] = true; //le due barre precedenti a quella sono entrambe BULL
-   if (nearestMax > max-tollerance)                            sellConditions[4] = true; //il massimo delle ultime 5 barre era vicino al massimo assoluto della giornata
-   if (MarketInfo(nomIndice,MODE_BID) <= max)                  sellConditions[5] = true; // se il prezzo sta salendo non devo rientrare (mi ha già buttato fuori quando ho toccato max)
-   if (MarketInfo(nomIndice,MODE_BID) > lowerBand)             sellConditions[6] = true; // non devo essere oltre la banda inferiore
-   if (!existOpendedAndClosedOnThisBar(2))                     sellConditions[7] = true; // Se non ho 2 ordini aperti e chiusi in questa barra
-   if (High[0] < max)                                          sellConditions[8] = true; // solo se la barra attuale non è anche il massimo di giornata 
-   if (!existOrderOnThisBar(1))                                sellConditions[9] = true; // se NON ho un ordine già aperto in questa barra (apre più ordini in ogni direzione)
-   if (getSLDistance("SELL", min_SL_Distance, max_SL_Distance))sellConditions[10] = true; // lo SL è almeno distante quanto richiesto
-   if (enabledHours[Hour()] == true)                           sellConditions[11] = true; // A questa ora posso tradare
-   //if (existOrder(1) < 0 )                                   sellConditions[12] = true;// non ho già un ordine attivo in questa direzione (apre un solo ordine per direzione)
-   */
    
    if(   (sellConditions[0])  
       && (sellConditions[1]) 
@@ -636,6 +612,7 @@ for(int pos=0;pos<OrdersTotal();pos++)
       //&& (sellConditions[8])
       //&& (sellConditions[9])
       //&& (sellConditions[10]) 
+      && (sellConditions[11]) 
       
    )
    {
