@@ -14,7 +14,7 @@
 //--------------------------+
 // BOT NAME AND VERSION
 //--------------------------+
-string bot_name = "HA Mago_B 0.3.31"; // versione base con protector
+string bot_name = "Mago 0.3.312 "; // Inserito filtro [10] per impedire acquisti fuori dalle Bande di Bollinger
 string botSettings; //contiene i settaggi del Bot
 
 
@@ -40,6 +40,7 @@ extern int min_SL_Distance = 0;                 /*min. Stop Loss Distance*/
 extern int max_SL_Distance = 10000;             /*max. Stop Loss Distance*/
 extern int protectionStartDistance = 90;        /*Cameback % Start*/
 extern int protectionCloseDistance = 80;           /*Cameback % Protection*/
+extern int SuperTrend = 14;
 extern string openHours = "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23";                            
 
 extern string ext_web_server_settings = "=============== Web Server ===============";
@@ -131,7 +132,8 @@ datetime blockedBy_getSLDistance_for_BUY;   // getSLDistance salva qui il Time[]
 datetime blockedBy_getSLDistance_for_SELL;   // getSLDistance salva qui il Time[] dell'ultima barra bloccata da lui
 bool webBarDataSendedToServer;      // gestisce se inviare o no i dati iniziali di una barra al webServer
 int simulationID;                   // serve per scrivere un ID univoco nella simulazione sul web server per distinguerle
-
+int actualPeriod; //periodo del grafico attuale
+int slowerPeriod;   // periodo del timeframe superiore a cui calcolare il supertrend
 //+--------------- Include ------------------------+
 
 //#include  "Y3_POWER_LIB.mqh"
@@ -270,6 +272,7 @@ int init()
    botSettings += "usePercentageRisk:+"+(string)usePercentageRisk+",+";
    botSettings += "protectionStartDistance:+"+(string)protectionStartDistance+",+";
    botSettings += "protectionCloseDistance:+"+(string)protectionCloseDistance+",+";
+   botSettings += "SuperTrend:+"+(string)SuperTrend+",+";
    botSettings += "Spread:+"+(string)MarketInfo(nomIndice, MODE_SPREAD)+""; // ATTENZIONE !! ricordarsi che l'ultimo è senza virgola finale!!
    
 
@@ -295,6 +298,23 @@ int init()
    Print(enabledHours[0]+","+enabledHours[1]+","+enabledHours[2]+","+enabledHours[3]+","+enabledHours[4]+","+enabledHours[5]+","+enabledHours[6]+","+enabledHours[7]+","+enabledHours[8]+","+enabledHours[9]+","+enabledHours[10]+","+enabledHours[11]+","+enabledHours[12]+","+enabledHours[13]+","+enabledHours[14]+","+enabledHours[15]+","+enabledHours[16]+","+enabledHours[17]+","+enabledHours[18]+","+enabledHours[19]+","+enabledHours[20]+","+enabledHours[21]+","+enabledHours[22]+","+enabledHours[23]);
 
 
+
+   // scelta dei periodi superiori per SUPERTREND
+   switch(Period())
+     {
+      case 1:     slowerPeriod=30; break;
+      case 5:     slowerPeriod=60; break;
+      case 15:    slowerPeriod=240; break;
+      case 30:    slowerPeriod=1440; break;
+      case 60:    slowerPeriod=1440; break;
+      case 240:   slowerPeriod=10080; break;
+      case 1440:  slowerPeriod=10080; break;
+      case 10080: slowerPeriod=43200; break;
+      case 43200: slowerPeriod=15; Print("Impossibile usare questo EA sul timeframe mensile"); deinit();
+     }
+     
+     Print("Trend Period Filter: "+slowerPeriod);
+     
    // test x l'invio di un ordine al webserver (cambiare il ticket perchè dopo un mese escono dalla history!)
    // bool test = webSendOpenOrder(18371722,3);
    // bool  test = webSendCloseOrder(18371722,3);
@@ -446,24 +466,30 @@ int paramD1()
    {  // High e Low delle Heiken Ashi non funzionano come i prezzi
       // High può essere inferiore a low, nel qual caso è il low e la barra è rossa.
       // Quando invece High è > Low la barra è bianca.
+      /*
       haOpen[i]  = iCustom(nomIndice,0,"Heiken Ashi",HA_OPEN,i);
       haClose[i] = iCustom(nomIndice,0,"Heiken Ashi",HA_CLOSE,i);
       haHigh[i]  = MathMax(iCustom(nomIndice,0,"Heiken Ashi",HA_HIGH,i),iCustom(nomIndice,0,"Heiken Ashi",HA_LOW,i));
       haLow[i]   = MathMin(iCustom(nomIndice,0,"Heiken Ashi",HA_HIGH,i),iCustom(nomIndice,0,"Heiken Ashi",HA_LOW,i));
-
+      */
       // HA a 15 minuti
+      /*
       haOpenM15[i]  = iCustom(nomIndice,PERIOD_M5,"Heiken Ashi",HA_OPEN,i);
       haCloseM15[i] = iCustom(nomIndice,PERIOD_M5,"Heiken Ashi",HA_CLOSE,i);
       haHighM15[i]  = MathMax(iCustom(nomIndice,PERIOD_M5,"Heiken Ashi",HA_HIGH,i),iCustom(nomIndice,0,"Heiken Ashi",HA_LOW,i));
       haLowM15[i]   = MathMin(iCustom(nomIndice,PERIOD_M5,"Heiken Ashi",HA_HIGH,i),iCustom(nomIndice,0,"Heiken Ashi",HA_LOW,i));
-      
+      */
 
       lowerBand[i] = iBands(nomIndice,0,14,2,0,PRICE_MEDIAN,MODE_LOWER,i);
       upperband[i] = iBands(nomIndice,0,14,2,0,PRICE_MEDIAN,MODE_UPPER,i);
       midBand[i] = iBands(nomIndice,0,14,2,0,PRICE_MEDIAN,MODE_MAIN,i);
       
    }
-   
+    //PROVA CON FILTRO Supertrend 14 
+    double trendUp, trendDown;
+    trendUp = iCustom(nomIndice,slowerPeriod,"downloads\\SuperTrend",SuperTrend,false,14,14,14,14,14,14,14,14,14,0,0);
+    trendDown = iCustom(nomIndice,slowerPeriod,"downloads\\SuperTrend",SuperTrend,false,14,14,14,14,14,14,14,14,14,1,0);
+    
     
 //-----------------enter buy order---------------------------+
 
@@ -473,15 +499,18 @@ int paramD1()
    if (Low[1] < lowerBand[1])                                  buyConditions[0] = true;   // La barra precedente ha il minimo sotto alla barra inferiore di bollinger
    if (Close[0] > High[1])                                     buyConditions[1] = true;   // il prezzo sale oltre al massimo della barra precedente
    if ( (Close[0] < midBand[0]) )                              buyConditions[2] = true;   // il prezzo attuale è sotto alla middle band di Bollinger
-   if (!existOpendedAndClosedOnThisBar(2))                     buyConditions[3] = true;   // Se non ho 2 ordini aperti e chiusi in questa barra
-   if (!existOrderOnThisBar(0))                                buyConditions[4] = true;   // se NON ho un ordine già aperto in questa barra (apre un solo ordine per ogni direzione)
-   if (getSLDistance("BUY", min_SL_Distance, max_SL_Distance)) buyConditions[5] = true;   // lo SL è almeno distante quanto richiesto
-   if (enabledHours[Hour()] == true)                           buyConditions[6] = true;   // A questa ora posso tradare
-   if (isGoingUpAndDown())                                     buyConditions[7] = true;   // se almeno una delle ultime 10 barre chiudeva sopra a midBand (sto zigzagando)
-   //if ( (Low[0]<lowerBand[0]) && (Low[1]<lowerBand[1]) && (Low[2]<lowerBand[2]) && (Low[3]<lowerBand[3]) && (Low[4]<lowerBand[4]) && (Low[5]<lowerBand[5]) )   buyConditions[8] = true; // entra solo se le ultime 4 barre orarie attraversano bollinger
-   
+   if (!existOrderOnThisBar(0))                                buyConditions[3] = true;   // se NON ho un ordine già aperto in questa barra (apre un solo ordine per ogni direzione)
+   if (getSLDistance("BUY", min_SL_Distance, max_SL_Distance)) buyConditions[4] = true;   // lo SL è almeno distante quanto richiesto
+   if (enabledHours[Hour()] == true)                           buyConditions[5] = true;   // A questa ora posso tradare
+   if (isGoingUpAndDown())                                     buyConditions[6] = true;   // se almeno una delle ultime 10 barre chiudeva sopra a midBand (sto zigzagando)
+   if (!existOpendedAndClosedOnThisBar(1))                     buyConditions[7] = true;   // Se non ho 1 ordine aperto e chiuso in questa barra
+   //if (existOrder(0) < 0)                                    buyConditions[8] = true;   // non ho già un ordine aperto in questa direzione (apre un solo ordine per direzione)
+   //if ((Close[0] < trendUp) && (trendUp != EMPTY_VALUE))     buyConditions[9] = true;  // Solo se il trend daily è UP - CON BUG
+   if ((Close[0] > trendUp) && (trendUp != EMPTY_VALUE))       buyConditions[9] = true;  // Solo se il trend daily è UP - SENZA BUG
+   if (Close[0] < upperband[0])                                buyConditions[10] = true;    // Non sono salito oltre la upperBand
+
    /*
-   if ((startTime <= tm) && (tm < endTime))                buyConditions[0] = true;
+   if ((startTime <= tm) && (tm < endTime))                    buyConditions[0] = true;
    if (haClose[1] > haOpen[1])                                 buyConditions[1] = true; //la barra HA precedente è BULL
    if (MathAbs(haClose[1]-haOpen[1]) > 1*Point)                buyConditions[2] = true; //la barra precedente ha + di 1 punto tra apertura e chiusura
    if ((haClose[2] < haOpen[2]) && (haClose[3] < haOpen[3]))   buyConditions[3] = true; //le due barre precedenti a quella sono entrambe BEAR
@@ -505,7 +534,7 @@ int paramD1()
       && (buyConditions[6]) 
       && (buyConditions[7]) 
       //&& (buyConditions[8]) 
-      
+      //&& (buyConditions[9])       
    )
    {
          entreeBuy = true; 
@@ -562,17 +591,20 @@ for(int pos=0;pos<OrdersTotal();pos++)
 
 //-----------------enter sell order----------------------------+
    // sellConditions array
-   if (High[1] > upperband[1])                                 sellConditions[0] = true;   // La barra precedente ha il massimo sopra alla barra superiore di bollinger
-   if (Close[0] < Low[1])                                      sellConditions[1] = true;   // il prezzo scende oltre al minimo della barra precedente
-   if (Close[0] > midBand[0])                                  sellConditions[2] = true;  // il prezzo attuale è sopra alla middle band di Bollinger
-   if (!existOpendedAndClosedOnThisBar(2))                     sellConditions[3] = true;  // Se non ho 2 ordini aperti e chiusi in questa barra
-   if (!existOrderOnThisBar(1))                                sellConditions[4] = true;  // se NON ho un ordine già aperto in questa barra (apre più ordini in ogni direzione)
-   if (getSLDistance("SELL", min_SL_Distance, max_SL_Distance))sellConditions[5] = true;  // lo SL è almeno distante quanto richiesto
-   if (enabledHours[Hour()] == true)                           sellConditions[6] = true;  // A questa ora posso tradare
-   if (isGoingUpAndDown())                                     sellConditions[7] = true;   // se almeno una delle ultime 10 barre chiudeva sopra a midBand (sto zigzagando)
-//if ( (High[0]>upperband[0]) && (High[1]>upperband[1]) && (High[2]>upperband[2]) && (High[3]>upperband[3]) && (High[4]>upperband[4]) && (High[5]>upperband[5]))   sellConditions[8] = true; // entra solo se le ultime 4 barre orarie attraversano bollinger
+   if (High[1] > upperband[1])                                 sellConditions[0] = true;     // La barra precedente ha il massimo sopra alla barra superiore di bollinger
+   if (Close[0] < Low[1])                                      sellConditions[1] = true;     // il prezzo scende oltre al minimo della barra precedente
+   if (Close[0] > midBand[0])                                  sellConditions[2] = true;     // il prezzo attuale è sopra alla middle band di Bollinger
+   if (!existOrderOnThisBar(1))                                sellConditions[3] = true;     // se NON ho un ordine già aperto in questa barra (apre più ordini in ogni direzione)
+   if (getSLDistance("SELL", min_SL_Distance, max_SL_Distance))sellConditions[4] = true;     // lo SL è almeno distante quanto richiesto
+   if (enabledHours[Hour()] == true)                           sellConditions[5] = true;     // A questa ora posso tradare
+   if (isGoingUpAndDown())                                     sellConditions[6] = true;     // se almeno una delle ultime 10 barre chiudeva sopra a midBand (sto zigzagando)
+   if (!existOpendedAndClosedOnThisBar(1))                     sellConditions[7] = true;     // Se non ho 1 ordine aperto e chiuso in questa barra   
+   //if (existOrder(1) < 0 )                                   sellConditions[8] = true;     // non ho già un ordine attivo in questa direzione (apre un solo ordine per direzione)
+   if ((Close[0] > trendDown) && (trendDown != EMPTY_VALUE))   sellConditions[9] = true;     // Solo se il trend daily è DOWN - CON BUG
+   //if ((Close[0] < trendDown) && (trendDown != EMPTY_VALUE))   sellConditions[9] = true;   // Solo se il trend daily è DOWN - SENZA BUG
+   if (Close[0] > lowerBand[0])                                sellConditions[10] = true;    // Non sono sceso oltre la lowerBand
 
-   
+
    /*
    if ((startTime <= tm) && (tm < endTime))                    sellConditions[0] = true; 
    if (haClose[1] < haOpen[1])                                 sellConditions[1] = true; //la barra HA precedente è BEAR
@@ -598,6 +630,8 @@ for(int pos=0;pos<OrdersTotal();pos++)
       && (sellConditions[6]) 
       && (sellConditions[7]) 
       //&& (sellConditions[8])
+      //&& (sellConditions[9])
+      && (sellConditions[10]) 
       
    )
    {
