@@ -497,7 +497,7 @@ int paramD1()
    
    
    //if (Low[1] < lowerBand[1])                                  buyConditions[0] = true;   // La barra precedente ha il minimo sotto alla barra inferiore di bollinger
-   if ((Low[1] < lowerBand[1]) || (Low[2] < lowerBand[2]))     buyConditions[0] = true;   // La barra precedente o quella prima ha il minimo sotto alla barra inferiore di bollinger
+   if ((Low[1] < lowerBand[1]) || ((Low[2] < lowerBand[2]) && (High[1] < High[2]) ))     buyConditions[0] = true;   // La barra precedente o quella prima ha il minimo sotto alla barra inferiore di bollinger. 1 non deve avere sfondato 2, se 2 tocca bollinger ed 1 no
    if (Close[0] > High[1])                                     buyConditions[1] = true;   // il prezzo sale oltre al massimo della barra precedente
    if ( (Close[0] < midBand[0]) )                              buyConditions[2] = true;   // il prezzo attuale è sotto alla middle band di Bollinger
    if (!existOrderOnThisBar(0))                                buyConditions[3] = true;   // se NON ho un ordine già aperto in questa barra (apre un solo ordine per ogni direzione)
@@ -595,7 +595,7 @@ for(int pos=0;pos<OrdersTotal();pos++)
 //-----------------enter sell order----------------------------+
    // sellConditions array
    //if (High[1] > upperband[1])                               sellConditions[0] = true;     // La barra precedente ha il massimo sopra alla barra superiore di bollinger
-   if ((High[1] > upperband[1]) || (High[2] > upperband[2]))   sellConditions[0] = true;     // La barra precedente o quella prima ha il massimo sopra alla barra superiore di bollinger
+   if ((High[1] > upperband[1]) || ((High[2] > upperband[2]) && (Low[1] > Low[2])))   sellConditions[0] = true;     // La barra precedente o quella prima ha il massimo sopra alla barra superiore di bollinger. Low 1 non deve avere sfondato 2, se due tocca bollinger ed 1 no.
    if (Close[0] < Low[1])                                      sellConditions[1] = true;     // il prezzo scende oltre al minimo della barra precedente
    if (Close[0] > midBand[0])                                  sellConditions[2] = true;     // il prezzo attuale è sopra alla middle band di Bollinger
    if (!existOrderOnThisBar(1))                                sellConditions[3] = true;     // se NON ho un ordine già aperto in questa barra (apre più ordini in ogni direzione)
