@@ -14,7 +14,7 @@
 //--------------------------+
 // BOT NAME AND VERSION
 //--------------------------+
-string bot_name = "HA System 0.3.4 BETA SLmover 0";
+string bot_name = "HA System 0.3.4"; // limite acquisto e vendita ai massimi di giornata
 string botSettings; //contiene i settaggi del Bot
 
 
@@ -476,7 +476,6 @@ int paramD1()
    if (!existOrderOnThisBar(0))                                buyConditions[9] = true; // se NON ho un ordine già aperto in questa barra (apre un solo ordine per ogni direzione)
    if (getSLDistance("BUY", min_SL_Distance, max_SL_Distance)) buyConditions[10] = true; // lo SL è almeno distante quanto richiesto
    if (enabledHours[Hour()] == true)                           buyConditions[11] = true; // A questa ora posso tradare
-   //if (existOrder(0) < 0)                                    buyConditions[12] = true; // non ho già un ordine aperto in questa direzione (apre un solo ordine per direzione)
    
    
    if(   (buyConditions[0]) 
@@ -491,7 +490,6 @@ int paramD1()
       && (buyConditions[9]) 
       && (buyConditions[10]) 
       && (buyConditions[11]) 
-      //&& (MathAbs(haOpen[1]-haClose[1]) > MathAbs(haHigh[1]-haLow[1])/2 ) //il corpo deve essere maggiore alla metà dell'ombra
    )
    {
          entreeBuy = true; 
@@ -524,8 +522,8 @@ for(int pos=0;pos<OrdersTotal();pos++)
      // Print("Trovato Ordine Buy da controllare : ",OrderTicket());
      
      //clausole di chiusura
-     if ((isCameBack_One(OrderTicket(), 0))                                                       // se dopo aver visto un profitto di 1:1 torna indietro
-       //|| (isCameBack_Two(OrderTicket(), protectionStartDistance, protectionCloseDistance))        // se ha raggiunto una certa percentuale di profitto e poi torna indietro
+     if ((isCameBack_One(OrderTicket(), 0))                                                        // se dopo aver visto un profitto di 1:1 torna indietro
+       || (protector(OrderTicket(), protectionStartDistance, protectionCloseDistance))             // se ha raggiunto una certa percentuale di profitto e poi torna indietro
        || (slReached(OrderTicket()))                                                               // Raggiunto SL
        || (tpReached(OrderTicket()))                                                               // Raggiunto TP
      )
@@ -560,7 +558,6 @@ for(int pos=0;pos<OrdersTotal();pos++)
    if (!existOrderOnThisBar(1))                                sellConditions[9] = true; // se NON ho un ordine già aperto in questa barra (apre più ordini in ogni direzione)
    if (getSLDistance("SELL", min_SL_Distance, max_SL_Distance))sellConditions[10] = true; // lo SL è almeno distante quanto richiesto
    if (enabledHours[Hour()] == true)                           sellConditions[11] = true; // A questa ora posso tradare
-   //if (existOrder(1) < 0 )                                   sellConditions[12] = true;// non ho già un ordine attivo in questa direzione (apre un solo ordine per direzione)
 
    if(   (sellConditions[0])  
       && (sellConditions[1]) 
@@ -574,7 +571,6 @@ for(int pos=0;pos<OrdersTotal();pos++)
       && (sellConditions[9]) 
       && (sellConditions[10]) 
       && (sellConditions[11]) 
-      //&& (MathAbs(haOpen[1]-haClose[1]) > MathAbs(haHigh[1]-haLow[1])/2 ) //il corpo deve essere maggiore alla metà dell'ombra
    )
    {
       entreeSell = true; 
@@ -598,7 +594,7 @@ for(int pos=0;pos<OrdersTotal();pos++)
      
      //clausole di chiusura
      if ( (isCameBack_One(OrderTicket(), 0))                                                       // se dopo aver visto un profitto di 1:1 torna indietro
-       //|| (isCameBack_Two(OrderTicket(), protectionStartDistance, protectionCloseDistance))        // se ha raggiunto una certa percentuale di profitto e poi torna indietro
+       || (protector(OrderTicket(), protectionStartDistance, protectionCloseDistance))             // se ha raggiunto una certa percentuale di profitto e poi torna indietro
        || (slReached(OrderTicket()))                                                               // Raggiunto SL
        || (tpReached(OrderTicket()))                                                               // Raggiunto TP
        )
@@ -683,7 +679,12 @@ int ouvertureBuy()
          tpPaolone = 1;
 
          // applico il moltiplicatore del TP solo se siamo sopra alla media
+         // ================= VERSIONE ORIGINALE =============
          if ( MarketInfo(nomIndice,MODE_BID) > middleBand ) tpPaolone = autoTargetMultiplier(TP_Paolone_Multiplier);
+         
+         // =============== VERSIONE AUTOADATTANTE IN ENTRAMBI I CASI; E CHE SCENDE SOTTO ALL'1:1===================
+         //tpPaolone = autoTargetMultiplier(TP_Paolone_Multiplier);
+         
 
 
          takeprofit = MarketInfo(nomIndice,MODE_ASK) + tpPaolone*(MarketInfo(nomIndice,MODE_ASK) - stoploss) * orx * TP_Multiplier ;
@@ -812,7 +813,11 @@ int ouvertureSell()
          tpPaolone = 1;
          
          // applico il moltiplicatore del TP solo se siamo sopra alla media
+         // ================= VERSIONE ORIFGINALE =============
          if ( MarketInfo(nomIndice,MODE_BID) < middleBand ) tpPaolone = autoTargetMultiplier(TP_Paolone_Multiplier);
+
+         // =============== VERSIONE AUTOADATTANTE IN ENTRAMBI I CASI; E CHE SCENDE SOTTO ALL'1:1===================
+         //tpPaolone = autoTargetMultiplier(TP_Paolone_Multiplier);
          
 
          takeprofit = MarketInfo(nomIndice,MODE_BID) - tpPaolone*(stoploss - MarketInfo(nomIndice,MODE_BID)) * orx * TP_Multiplier;
@@ -1050,6 +1055,67 @@ bool existOpendedAndClosedOnThisBar(int maxOrders)
 
 
 // Modifica distanza Take Profit in base agli ordini passati ---------------------------- +
+// ======================= VESIONE MODIFICATA CHE SCENDE SOTTO ALL'1:1
+/*
+double autoTargetMultiplier(double maxMultiplier){
+
+   //se la funzione è disattivata, esco prima di iniziare resituendo il moltiplicatore indicato 
+   if (enableAutoProfitMultiplier == false)    return maxMultiplier;
+   
+   
+   // Restituisce un moltiplicatore da usare nell'apertura ordine per calcolare il TP
+   // la moltiplicazione in questo sistema parte dal rischio.
+   // il moltiplicatore non può mai scendere a 0 (chiuderebbe l'ordine appena aperto)
+   // dato il maxMultiplier divido per 10, perchè analizzo 10 ordini storici
+   // per ogni ordine in perdita sottraggo un decimo dal maxMultiplier, fino al nono ordine (per non andare a 0)
+   // con 0 ordini in perdita, restituisco maxMultiplier
+   // con 10 ordini in perdita restituisco 1 decimo del TP originale
+   
+   int i = 0;
+   int o = 0;
+   
+   double step = 0; // un decimo della distanza tra 0 e maxMultiplier
+   step = (maxMultiplier-1)/10;
+   step = NormalizeDouble(step,2);
+
+   o = 0; //azzero il contatore
+    
+   //loop history and get orders of this robot
+   for (i=OrdersHistoryTotal()-1; i>=0; i--) 
+   {
+      if ( (OrderSelect(i,SELECT_BY_POS,MODE_HISTORY)==true) && (OrderMagicNumber()==SIGNATURE) && (OrderSymbol()==nomIndice) )
+      {
+         o = o+1;
+         if (OrderProfit() <= 0) maxMultiplier = maxMultiplier - step;
+         //Scrivo la data dell'ordine
+         //Print("autoTargetMultiplier: Order "+OrderTicket() +" Profit "+ OrderProfit() +" - Multiplier: "+maxMultiplier);
+         
+         if (o == 9) break;
+         
+      }
+      
+      if (o == 9) break;
+      
+   }
+
+
+   maxMultiplier = NormalizeDouble(maxMultiplier, 2);
+   
+   // mai minore di 1 (ORIGINALE)
+   //if (maxMultiplier < 1) maxMultiplier = 1;
+      
+   // 27/07/2015 - credo di aver trovato un bug
+   // il maxMultiplier dovrebbe essere 1+il numero trovato! Invece era pari al numero trovato!
+   // maxMultiplier = 1 + maxMultiplier;
+   
+   
+   //Print("autoTargetMultiplier: ",maxMultiplier );
+   return maxMultiplier;
+
+}
+*/
+ 
+// ======================== VERSIONE ORIGINALE ======================================
 double autoTargetMultiplier(double maxMultiplier){
 
    //se la funzione è disattivata, esco prima di iniziare resituendo il moltiplicatore indicato 
@@ -1106,7 +1172,7 @@ double autoTargetMultiplier(double maxMultiplier){
    return maxMultiplier;
 
 }
-
+// ---------------- End of autoTargetMultiplier ----------------------------
 
 
 
@@ -1198,10 +1264,11 @@ bool tpReached(int tkt)
 
 
 //--- Verifica se un ordine torna indietro dopo aver visto un certo profitto ----------------------------+ 
-// ====================  VERSIONE CHE MANTIENE FISSA LA DISTANZA DELLO SL FINO A ZERO =====================================
+// ====================  VERSIONE CHE MANTIENE FISSA LA DISTANZA DELLO SL OLTRE LO ZERO =====================================
+/*
 bool isCameBack_One(int tkt, int protectionPercent)
 {
-   // questa versione guarda la distanza originale dello SL dal punto di apertura e fa salire lo SL al salire del prezzo (o scendere per i sell)
+   // questa versione guarda la distanza originale dello SL dal punto di apertura e fa salire lo SL al salire del prezzo (o scendere per i sell) 
    int shift;
    double profit, max_, min_, hiddener = 0;
    bool result = false;
@@ -1217,7 +1284,8 @@ bool isCameBack_One(int tkt, int protectionPercent)
       if ((OrderType() == OP_BUY) && (shift > 0)) // buy order
       {
          max_ = High[iHighest(nomIndice,0,MODE_HIGH,shift,0)]; //Print("isCameBack BUY: profit="+profit+" -- max_="+max_+" -- shift="+shift);
-         if ( MarketInfo(nomIndice,MODE_BID) <= MathMin((max_ - profit),OrderOpenPrice()) )
+         if ( MarketInfo(nomIndice,MODE_BID) <= (max_ - profit) ) // ANCHE OLTRE LO ZERO
+         //if ( MarketInfo(nomIndice,MODE_BID) <= MathMin((max_ - profit),OrderOpenPrice()) ) // FINO A ZERO, NON OLTRE
          {result = true; Print("Order Buy ", tkt, " is Coming Back: CHIUDO");}
       }
 
@@ -1225,7 +1293,8 @@ bool isCameBack_One(int tkt, int protectionPercent)
       if ((OrderType() == OP_SELL) && (shift > 0) ) // sell order
       {
          min_ = Low[iLowest(nomIndice,0,MODE_LOW,shift,0)]; //Print("isCameBack SELL: profit="+profit+" -- min_="+min_+" -- shift="+shift);
-         if ( MarketInfo(nomIndice,MODE_BID) >= MathMax((min_ + profit), OrderOpenPrice()) ) 
+         if ( MarketInfo(nomIndice,MODE_BID) >= (min_ + profit)) // ANCHE OLTRE LO ZERO
+         //if ( MarketInfo(nomIndice,MODE_BID) >= MathMax((min_ + profit), OrderOpenPrice()) ) // FINO A ZERO, NON OLTRE
          {result = true; Print("Order Sell ", tkt, " is Coming Back: CHIUDO");}
       }
        
@@ -1238,11 +1307,9 @@ bool isCameBack_One(int tkt, int protectionPercent)
 
 }
 //-----------------end----------------------------------------+ 
+*/
 
 
-
-
-/*
 // ====================== VERSIONE ORIGINALE ====================================
 bool isCameBack_One(int tkt, int protectionPercent)
 {
@@ -1285,10 +1352,9 @@ bool isCameBack_One(int tkt, int protectionPercent)
 
 }
 //-----------------end----------------------------------------+ 
-*/
 
 
-bool isCameBack_Two(int tkt,int protectionStart, int protectionClose)
+bool protector(int tkt,int protectionStart, int protectionClose)
 {
    // protectionStart: la percentuale di profitto a cui si attiva il protettore
    // protectionClose: la percentuale che viene protetta, dopo aver raggiunto protectionStart
@@ -1539,11 +1605,13 @@ int commentaire()
             
             "\n Next Order TPMultip.: ",autoTargetMultiplier(TP_Paolone_Multiplier),
             
-            "\n Periods Base / Adaptive: ",Y3_POWER_LIB_maPeriod ," / ", adaptive_maPeriod,
+            //"\n Periods Base / Adaptive: ",Y3_POWER_LIB_maPeriod ," / ", adaptive_maPeriod,
             
             //"\n Next Order Size: ",setPower(POWER, LooseRecoveryRatio, WinRecoveryRatio, RecoveryStopper),
 
             "\n Orari: ",openHours,
+            
+            "\n Protector: ",protectionStartDistance ," / ", protectionCloseDistance,
             
 //            "\n +-----------------------------   ",
 //            "\n BUY Conditions   : ",buyConditions[0],buyConditions[1],
