@@ -189,8 +189,8 @@ bool isUpTrend(int shift=3){
 
 
    // per tracciare il punto di ingresso buy
-   double actualATR = iATR(nomIndice,PERIOD_CURRENT,7,0);
-   double targetPrice = NormalizeDouble( (Low[1]+((High[1]-Low[1])/2)) -0.7*actualATR,Digits);
+   //double actualATR = iATR(nomIndice,PERIOD_CURRENT,7,0);
+   //double targetPrice = NormalizeDouble( (Low[1]+((High[1]-Low[1])/2)) -0.7*actualATR,Digits);
 
    
    if( (actualPrice > actualSAR) && (Close[1] > oldSar_1) && (Close[2] > oldSar_2) && (Close[3] > oldSar_3) ) 
@@ -219,8 +219,8 @@ bool isDownTrend(int shift=3){
    double actualPrice = MarketInfo(nomIndice, MODE_BID);
 
    // per tracciare il punto di ingresso buy
-   double actualATR = iATR(nomIndice,PERIOD_CURRENT,7,0);
-   double targetPrice = NormalizeDouble( (Low[1]+((High[1]-Low[1])/2)) +0.7*actualATR,Digits);
+   //double actualATR = iATR(nomIndice,PERIOD_CURRENT,7,0);
+   //double targetPrice = NormalizeDouble( (Low[1]+((High[1]-Low[1])/2)) +0.7*actualATR,Digits);
    
    if( (actualPrice < actualSAR) && (Close[1] < oldSar_1) && (Close[2] < oldSar_2) && (Close[3] < oldSar_3) ) 
       return true;
@@ -295,7 +295,8 @@ bool isMin(){
    farMin = Low[farShift]; // suo valore
    
    
-   if ((nearMin < farMin) && (High[1] <= High[2]) )return true;
+   //if ((nearMin < farMin)  )return true; // senza guardare i minimi decrescenti
+   if ((nearMin < farMin) && (High[1] <= High[2]) )return true;  // guardando i minimi decrescenti (migliora P.F e R.A.)
 
    else return false;
 
@@ -315,7 +316,8 @@ bool isMax(){
    farShift = iHighest(nomIndice,PERIOD_CURRENT,MODE_HIGH,MinMax_distance,nearShift+1); // massimo delle MinMax_distance barre partendo da quella precedente al massimo near
    farMax = High[farShift]; // suo valore
  
-   if ((nearMax > farMax) && (Low[1] >= Low[2]) ) return true;
+   //if ((nearMax > farMax)  ) return true; // senza guardare i massimi crescenti
+   if ((nearMax > farMax) && (Low[1] >= Low[2]) ) return true; // guardando i massimi crescenti (migliora P.F e R.A.)
   
    else return false;
 
@@ -470,8 +472,9 @@ bool partialClose(int tkt){
 
    double halfLots = NormalizeDouble( (OrderLots()/2), digits);
    
-   
-   if(!OrderClose(tkt,halfLots,price,2,c)) {Print("Errore nella chiusura PARZIALE di un ordine: "+(string)GetLastError()); return false;};
+   //if(!OrderModify(tkt,OrderOpenPrice(),OrderOpenPrice(),OrderTakeProfit(),OrderExpiration())) {Print("Errore nella modifica dello SL ordine: "+(string)GetLastError()); return false;}
+   // INFO : La chiusura a pareggio peggiora leggermente le performance. Non di molto, ma le peggiora.
+   if(!OrderClose(tkt,halfLots,price,2,c)) {Print("Errore nella chiusura PARZIALE di un ordine: "+(string)GetLastError()); return false;}
    
    return true;
 }
