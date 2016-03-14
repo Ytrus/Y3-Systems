@@ -550,9 +550,9 @@ for(int pos=0;pos<OrdersTotal();pos++)
      // Print("Trovato Ordine Buy da controllare : ",OrderTicket());
      
      //clausole di chiusura
-     if ((isCameBack_One(OrderTicket(), 0))                                                        // se dopo aver visto un profitto di 1:1 torna indietro
-       || (protector(OrderTicket(), protectionStartDistance, protectionCloseDistance))             // se ha raggiunto una certa percentuale di profitto e poi torna indietro
-       || (slReached(OrderTicket()))                                                               // Raggiunto SL
+     if (//(isCameBack_One(OrderTicket(), 0))                                                        // se dopo aver visto un profitto di 1:1 torna indietro
+       //|| (protector(OrderTicket(), protectionStartDistance, protectionCloseDistance))             // se ha raggiunto una certa percentuale di profitto e poi torna indietro
+        (slReached(OrderTicket()))                                                               // Raggiunto SL
        || (tpReached(OrderTicket()))                                                               // Raggiunto TP
      )
      {
@@ -624,9 +624,9 @@ for(int pos=0;pos<OrdersTotal();pos++)
      //Print("Trovato Ordine Sell da controllare : ",OrderTicket());
      
      //clausole di chiusura
-     if ( (isCameBack_One(OrderTicket(), 0))                                                       // se dopo aver visto un profitto di 1:1 torna indietro
-       || (protector(OrderTicket(), protectionStartDistance, protectionCloseDistance))             // se ha raggiunto una certa percentuale di profitto e poi torna indietro
-       || (slReached(OrderTicket()))                                                               // Raggiunto SL
+     if (// (isCameBack_One(OrderTicket(), 0))                                                       // se dopo aver visto un profitto di 1:1 torna indietro
+       //|| (protector(OrderTicket(), protectionStartDistance, protectionCloseDistance))             // se ha raggiunto una certa percentuale di profitto e poi torna indietro
+        (slReached(OrderTicket()))                                                               // Raggiunto SL
        || (tpReached(OrderTicket()))                                                               // Raggiunto TP
        )
      {

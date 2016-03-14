@@ -14,7 +14,7 @@
 //--------------------------+
 // BOT NAME AND VERSION
 //--------------------------+
-string bot_name = "Mago 0.3.314 "; // Envelope filter
+string bot_name = "Mago 0.3.318 ATReSLMover"; // Per il TP e lo SL uso l'ATR orario, poi muovo lo SL al salire del profitto
 string botSettings; //contiene i settaggi del Bot
 
 
@@ -504,7 +504,7 @@ int paramD1()
    
    if (Low[1] < lowerBand[1])                                  buyConditions[0] = true;   // La barra precedente ha il minimo sotto alla barra inferiore di bollinger
    if (Close[0] > High[1])                                     buyConditions[1] = true;   // il prezzo sale oltre al massimo della barra precedente
-   if ( (Close[0] < midBand[0]) )                              buyConditions[2] = true;   // il prezzo attuale è sotto alla middle band di Bollinger
+   //if ( (Close[0] < midBand[0]) )                              buyConditions[2] = true;   // il prezzo attuale è sotto alla middle band di Bollinger
    if (!existOrderOnThisBar(0))                                buyConditions[3] = true;   // se NON ho un ordine già aperto in questa barra (apre un solo ordine per ogni direzione)
    if (getSLDistance("BUY", min_SL_Distance, max_SL_Distance)) buyConditions[4] = true;   // lo SL è almeno distante quanto richiesto
    if (enabledHours[Hour()] == true)                           buyConditions[5] = true;   // A questa ora posso tradare
@@ -512,9 +512,9 @@ int paramD1()
    if (!existOpendedAndClosedOnThisBar(1))                     buyConditions[7] = true;   // Se non ho 1 ordine aperto e chiuso in questa barra
    //if (existOrder(0) < 0)                                    buyConditions[8] = true;   // non ho già un ordine aperto in questa direzione (apre un solo ordine per direzione)
    //if ((Close[0] < trendUp) && (trendUp != EMPTY_VALUE))     buyConditions[9] = true;   // Solo se il trend daily è UP - CON BUG
-   if ((Close[0] > trendUp) && (trendUp != EMPTY_VALUE))       buyConditions[9] = true;   // Solo se il trend daily è UP - SENZA BUG
+   //if ((Close[0] > trendUp) && (trendUp != EMPTY_VALUE))       buyConditions[9] = true;   // Solo se il trend daily è UP - SENZA BUG
    // if (Close[0] < upperband[0])                             buyConditions[10] = true;  // Non sono salito oltre la upperBand - abbastanza inconcludente nel 2010
-   if (Close[0] > lowerEnvelope)                               buyConditions[11] = true;  // Solo se non scende sotto al lower envelope
+   //if (Close[0] > lowerEnvelope)                               buyConditions[11] = true;  // Solo se non scende sotto al lower envelope
    
 
    
@@ -529,7 +529,7 @@ int paramD1()
       //&& (buyConditions[8]) 
       //&& (buyConditions[9])       
       //&& (buyConditions[10])       
-      && (buyConditions[11])
+      //&& (buyConditions[11])
    )
    {
          entreeBuy = true; 
@@ -588,20 +588,20 @@ for(int pos=0;pos<OrdersTotal();pos++)
    // sellConditions array
    if (High[1] > upperband[1])                               sellConditions[0] = true;       // La barra precedente ha il massimo sopra alla barra superiore di bollinger
    if (Close[0] < Low[1])                                      sellConditions[1] = true;     // il prezzo scende oltre al minimo della barra precedente
-   if (Close[0] > midBand[0])                                  sellConditions[2] = true;     // il prezzo attuale è sopra alla middle band di Bollinger
+   //if (Close[0] > midBand[0])                                  sellConditions[2] = true;     // il prezzo attuale è sopra alla middle band di Bollinger
    if (!existOrderOnThisBar(1))                                sellConditions[3] = true;     // se NON ho un ordine già aperto in questa barra (apre più ordini in ogni direzione)
    if (getSLDistance("SELL", min_SL_Distance, max_SL_Distance))sellConditions[4] = true;     // lo SL è almeno distante quanto richiesto
    if (enabledHours[Hour()] == true)                           sellConditions[5] = true;     // A questa ora posso tradare
    if (isGoingUpAndDown())                                     sellConditions[6] = true;     // se almeno una delle ultime 10 barre chiudeva sopra a midBand (sto zigzagando)
    if (!existOpendedAndClosedOnThisBar(1))                     sellConditions[7] = true;     // Se non ho 1 ordine aperto e chiuso in questa barra   
    //if (existOrder(1) < 0 )                                   sellConditions[8] = true;     // non ho già un ordine attivo in questa direzione (apre un solo ordine per direzione)
-   if ((Close[0] > trendDown) && (trendDown != EMPTY_VALUE))   sellConditions[9] = true;     // Solo se il trend daily è DOWN - CON BUG
+   //if ((Close[0] > trendDown) && (trendDown != EMPTY_VALUE))   sellConditions[9] = true;     // Solo se il trend daily è DOWN - CON BUG
    //if ((Close[0] < trendDown) && (trendDown != EMPTY_VALUE))   sellConditions[9] = true;   // Solo se il trend daily è DOWN - SENZA BUG
    //if (Close[0] > lowerBand[0])                                sellConditions[10] = true;  // Non sono sceso oltre la lowerBand - abbastanza inconcludente nel 2010
-   if (Close[0] < upperEnvelope)                               sellConditions[11] = true;    // Solo se non sale oltre all'upper envelope
+   //if (Close[0] < upperEnvelope)                               sellConditions[11] = true;    // Solo se non sale oltre all'upper envelope
 
    
-   if(   (sellConditions[0])  
+   if(   (sellConditions[0])
       && (sellConditions[1]) 
       //&& (sellConditions[2])
       && (sellConditions[3])
@@ -612,7 +612,7 @@ for(int pos=0;pos<OrdersTotal();pos++)
       //&& (sellConditions[8])
       //&& (sellConditions[9])
       //&& (sellConditions[10]) 
-      && (sellConditions[11]) 
+      //&& (sellConditions[11]) 
       
    )
    {
@@ -715,11 +715,11 @@ int ouvertureBuy()
 
       {  
          
-         stoploss   = (Low[1] - (SL_added_pips*Point));
+         stoploss   = getSL("BUY"); //(Low[1] - (SL_added_pips*Point));
    
          //TP variabile in base alla posizione rispetto alla media di bollinger
-         double middleBand = iBands(nomIndice,0,14,2,0,PRICE_MEDIAN,MODE_MAIN,0);
-         tpPaolone = 2;
+         //double middleBand = iBands(nomIndice,0,14,2,0,PRICE_MEDIAN,MODE_MAIN,0);
+         //tpPaolone = 2;
 
          // applico il moltiplicatore del TP solo se siamo sopra alla media
          // ================= VERSIONE ORIGINALE =============
@@ -729,8 +729,11 @@ int ouvertureBuy()
          //tpPaolone = autoTargetMultiplier(TP_Paolone_Multiplier);
          
 
-
-         takeprofit = MarketInfo(nomIndice,MODE_ASK) + tpPaolone*(MarketInfo(nomIndice,MODE_ASK) - stoploss) * orx * TP_Multiplier ;
+         // ================  ORIGINALE  ==============================
+         //takeprofit = MarketInfo(nomIndice,MODE_ASK) + tpPaolone*(MarketInfo(nomIndice,MODE_ASK) - stoploss) * orx * TP_Multiplier ;
+         
+         // TP ATR 15 MIN ==================
+         takeprofit = getTP("BUY");
    
          stoploss   = NormalizeDouble(stoploss-1000*Point ,MarketInfo(nomIndice,MODE_DIGITS));
         
@@ -847,13 +850,13 @@ int ouvertureSell()
    
       {
          
-         stoploss   = (High[1] + (SL_added_pips*Point));
+         stoploss   = getSL("SELL"); //(High[1] + (SL_added_pips*Point));
          
          
          //TP variabile in base alla posizione rispetto alla media di bollinger
-         double middleBand = iBands(nomIndice,0,14,2,0,PRICE_MEDIAN,MODE_MAIN,0);
+         //double middleBand = iBands(nomIndice,0,14,2,0,PRICE_MEDIAN,MODE_MAIN,0);
 
-         tpPaolone = 2;
+         //tpPaolone = 2;
          
          // applico il moltiplicatore del TP solo se siamo sopra alla media
          // ================= VERSIONE ORIFGINALE =============
@@ -862,12 +865,11 @@ int ouvertureSell()
          // =============== VERSIONE AUTOADATTANTE IN ENTRAMBI I CASI===================
          //tpPaolone = autoTargetMultiplier(TP_Paolone_Multiplier);
          
+         // ============== ORIGINALE =============
+         //takeprofit = MarketInfo(nomIndice,MODE_BID) - tpPaolone*(stoploss - MarketInfo(nomIndice,MODE_BID)) * orx * TP_Multiplier;
 
-         takeprofit = MarketInfo(nomIndice,MODE_BID) - tpPaolone*(stoploss - MarketInfo(nomIndice,MODE_BID)) * orx * TP_Multiplier;
-
-
-         // TP originale
-         //takeprofit = MarketInfo(nomIndice,MODE_BID) - (stoploss - MarketInfo(nomIndice,MODE_BID)) * orx * TP_Multiplier; //   Low[1] - ((stoploss - Low[1]) * orx * TP_Multiplier);
+         // TP ATR 15 MIN ==================
+         takeprofit = getTP("SELL");
          
          stoploss   = NormalizeDouble(stoploss+1000*Point,MarketInfo(nomIndice,MODE_DIGITS));
    
@@ -969,6 +971,41 @@ int fermetureSell(int tkt)
 
 //-----------------end----------------------------------------+
 
+
+
+//-------------------------------------------------+
+//    CALCOLO TP IN BASE AD ATR H1
+//-------------------------------------------------+
+double getTP(string direction = "BUY"){
+   
+   double atrValue = iATR(nomIndice,PERIOD_H1, 14, 0); //atr 14 orario
+   double result = 0;
+   if (direction == "BUY"){
+      result = Close[0] + atrValue;
+   }
+   else{
+      result = Close[0] - atrValue;
+   }
+   
+   return result;
+}
+
+//-------------------------------------------------+
+//    CALCOLO SL IN BASE AD ATR H1
+//-------------------------------------------------+
+double getSL(string direction = "BUY"){
+   
+   double atrValue = iATR(nomIndice,PERIOD_H1, 14, 0); //atr 14 orario
+   double result = 0;
+   if (direction == "BUY"){
+      result = Close[0] - atrValue;
+   }
+   else{
+      result = Close[0] + atrValue;
+   }
+   
+   return result;
+}
 
 
 //-------------------------------------------------+
@@ -1331,7 +1368,7 @@ bool tpReached(int tkt)
 
 //--- Verifica se un ordine torna indietro dopo aver visto un certo profitto ----------------------------+ 
 // ====================  VERSIONE CHE MANTIENE FISSA LA DISTANZA DELLO SL OLTRE LO ZERO =====================================
-/*
+
 bool isCameBack_One(int tkt, int protectionPercent)
 {
    // questa versione guarda la distanza originale dello SL dal punto di apertura e fa salire lo SL al salire del prezzo (o scendere per i sell) 
@@ -1373,10 +1410,11 @@ bool isCameBack_One(int tkt, int protectionPercent)
 
 }
 //-----------------end----------------------------------------+ 
-*/
+
 
 
 // ====================== VERSIONE ORIGINALE ====================================
+/*
 bool isCameBack_One(int tkt, int protectionPercent)
 {
 
@@ -1418,7 +1456,7 @@ bool isCameBack_One(int tkt, int protectionPercent)
 
 }
 //-----------------end----------------------------------------+ 
-
+*/
 
 bool protector(int tkt,int protectionStart, int protectionClose)
 {

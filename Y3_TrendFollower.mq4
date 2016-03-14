@@ -16,8 +16,8 @@
 string bot_name = "TrendFollower";
 string nomIndice = "GER30"; //sovrascritto dopo in init()
 
-extern int SIGNATURE = 0039000;
-extern string COMMENT = "TrendFollower";
+extern int SIGNATURE = 0039001;
+extern string COMMENT = "Y3TF";
 extern double POWER = 20;
 //extern int slowMA_period = 20;
 //extern int fastMA_period = 20;
@@ -100,7 +100,10 @@ void OnTick()
       || (OrderType() != OP_BUY)) continue;
       
       //clausole di chiusura
-      if (stoppedBySAR(OP_BUY))                                                          // se il SAR si gira, chiudo
+      if (   (stoppedBySAR(OP_BUY))                                     // se il SAR si gira, chiudo
+          //|| (isFridayNight())                                          // se è venerdì sera chiudo per evitare il gap del lunedì
+          
+         )                      
         closeOrder(OrderTicket());
 
       // --- chiusura parziale ---
@@ -152,13 +155,17 @@ void OnTick()
       || (OrderType() != OP_SELL)) continue;
       
       // --- clausole di chiusura ---
-      if (stoppedBySAR(OP_SELL))                                                          // se il SAR si gira, chiudo
+      if (   (stoppedBySAR(OP_SELL))                                    // se il SAR si gira, chiudo
+          //|| (isFridayNight())                                          // se è venerdì sera chiudo per evitare il gap del lunedì
+         )
          closeOrder(OrderTicket());
 
       // --- chiusura parziale ---
       if (minGainReached(OrderTicket()))
          partialClose(OrderTicket());
    }
+   
+
 
    
    // screen Log
@@ -438,6 +445,16 @@ bool stoppedBySAR(int ot){
    if ( (ot == OP_SELL) && (actualPrice > actualSAR) ) result = true;
    
    return result;
+}
+
+
+
+//-----------------------------------------------------------------+
+// Verifica se è venerdì sera: alle 21:30 chiudo tutto
+//-----------------------------------------------------------------+
+bool isFridayNight(){
+   if( (DayOfWeek() == 5) && (TimeHour(TimeCurrent()) == 20) ) return true;
+   else return false;
 }
 
 //-----------------------------------------------------------------+
