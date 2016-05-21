@@ -8,8 +8,7 @@
 #property version   "1.00"
 #property strict
 // ============== NOTE ======================
-// GBP USD (2015) sarStep 0.015 > performance belle stabili
-// GER30 Ago-Dic 2015 sarSpet 0.01 - partialCloseEnabled=true - trendFilter=3 [isUpTrend(3)] > miglior sfruttamento dei trend
+// GER30 M5 Default value
 // EURUSD - ToDo
 
 
