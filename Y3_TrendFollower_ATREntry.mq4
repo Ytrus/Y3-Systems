@@ -13,25 +13,23 @@
 // EURUSD - ToDo
 
 
-string bot_name = "ReversalAMA";
+string bot_name = "TrendFollower";
 string nomIndice = "GER30"; //sovrascritto dopo in init()
 
-extern int SIGNATURE = 0039001;
-extern string COMMENT = "Y3_REVAMA";
+extern int SIGNATURE = 0039000;
+extern string COMMENT = "TrendFollower";
 extern double POWER = 20;
-extern int TMA_Period = 100;
-extern double TMA_K = 3.0;
-extern bool limitOrders = false;
+//extern int slowMA_period = 20;
+//extern int fastMA_period = 20;
+//extern int TP_multiplier = 4;
+extern int MinMax_distance = 6;
+extern double sarStep = 0.01;
 extern bool partialCloseEnabled = true;
-int MinMax_distance = 10;
+
 
 // ----- enter conditions array -----
 bool buyConditions[5]; 
 bool sellConditions[5]; 
-
-
-// ----- GLOBALS -------
-double atr = 0; // atr attualmente usato in priceIsBetter()
 
 
 //+------------------------------------------------------------------+
@@ -60,11 +58,6 @@ void OnTick()
 {
 //---
    // ===============
-   //      GLOBALS
-   // ===============
-   atr = iATR(nomIndice,PERIOD_CURRENT,100,1); // atr delle ultime 100 barre
-
-   // ===============
    // Buy conditions
    // ===============
    /*
@@ -86,10 +79,11 @@ void OnTick()
          openOrder(OP_BUY, POWER);
    */
    
-   if(   (isUnderTMAChannel()) 
-      && (isUpAMA())
-      && (priceIsBetter(OP_BUY))
-      //&& (!existOrder(OP_BUY))
+   if(   (isUpTrend(3)) 
+      //&& (isMin()) 
+      //&& (maxIsBroken()) 
+      && (isEntryReached(OP_BUY))
+      && (!existOrder(OP_BUY))
       && (!existOpendedAndClosedOnThisBar(1))
       && (!existOrderOnThisBar(OP_BUY))
      )   
@@ -106,15 +100,12 @@ void OnTick()
       || (OrderType() != OP_BUY)) continue;
       
       //clausole di chiusura
-      if (   (stoppedByTMA(OP_BUY))                                       // se il SAR si gira, chiudo
-          //|| (isFridayNight())                                          // se è venerdì sera chiudo per evitare il gap del lunedì
-          
-         )                      
+      if (stoppedBySAR(OP_BUY))                                                          // se il SAR si gira, chiudo
         closeOrder(OrderTicket());
 
       // --- chiusura parziale ---
-      //if (minGainReached(OrderTicket()))
-      //   partialClose(OrderTicket());
+      if (minGainReached(OrderTicket()))
+         partialClose(OrderTicket());
    }
 
       
@@ -141,10 +132,11 @@ void OnTick()
          openOrder(OP_SELL, POWER);
    */
    
-   if(   (isOverTMAChannel()) 
-      && (isDownAMA()) 
-      && (priceIsBetter(OP_SELL))
-      //&& (!existOrder(OP_SELL))
+   if(   (isDownTrend(3)) 
+      //&& (isMax()) 
+      //&& (minIsBroken()) 
+      && (isEntryReached(OP_SELL))
+      && (!existOrder(OP_SELL))
       && (!existOpendedAndClosedOnThisBar(1))
       && (!existOrderOnThisBar(OP_SELL))
      )   
@@ -160,17 +152,13 @@ void OnTick()
       || (OrderType() != OP_SELL)) continue;
       
       // --- clausole di chiusura ---
-      if (   (stoppedByTMA(OP_SELL))                                      // se il SAR si gira, chiudo
-          //|| (isFridayNight())                                          // se è venerdì sera chiudo per evitare il gap del lunedì
-         )
+      if (stoppedBySAR(OP_SELL))                                                          // se il SAR si gira, chiudo
          closeOrder(OrderTicket());
 
       // --- chiusura parziale ---
-      //if (minGainReached(OrderTicket()))
-      //   partialClose(OrderTicket());
+      if (minGainReached(OrderTicket()))
+         partialClose(OrderTicket());
    }
-   
-
 
    
    // screen Log
@@ -183,102 +171,63 @@ void OnTick()
 
 
 //-------------------------------------------------+
-//    Sono sotto al lower TMA channel 
+//    Sono in un trend UP 
 //-------------------------------------------------+
-bool isUnderTMAChannel(){
-
-   double lastAMA = iCustom(nomIndice,0,"Downloads\\AMA",9,2,30,2,2,0,1);
-   double lastLowerChannel = iCustom(nomIndice,0,"Downloads\\TMA_Channel_End_Point",TMA_Period,0,100,TMA_K,2,1);
-   bool result = false;
+bool isUpTrend(int shift=3){
+   /*
+   double fastMA = iMA(nomIndice,PERIOD_CURRENT,fastMA_period,0,MODE_EMA,PRICE_MEDIAN,0);
+   double slowMA = iMA(nomIndice,PERIOD_CURRENT,slowMA_period,0,MODE_SMMA,PRICE_MEDIAN,0);
    
-   if( (lastAMA < lastLowerChannel) ) 
-       result = true;
-   return result;
+   if (fastMA > slowMA) return true;
+   else return false;
+   */
+   double actualSAR = iSAR(nomIndice,PERIOD_CURRENT,sarStep,0.2,0);
+   double oldSar_1 = iSAR(nomIndice,PERIOD_CURRENT,sarStep,0.2,1);
+   double oldSar_2 = iSAR(nomIndice,PERIOD_CURRENT,sarStep,0.2,2);
+   double oldSar_3 = iSAR(nomIndice,PERIOD_CURRENT,sarStep,0.2,3);
+   double actualPrice = MarketInfo(nomIndice, MODE_BID);
+
+
+   // per tracciare il punto di ingresso buy
+   double actualATR = iATR(nomIndice,PERIOD_CURRENT,7,0);
+   double targetPrice = NormalizeDouble( (Low[1]+((High[1]-Low[1])/2)) -0.7*actualATR,Digits);
+
    
-}
-
-//-------------------------------------------------+
-//    Sono sopra all'upper TMA channel 
-//-------------------------------------------------+
-bool isOverTMAChannel(){
-
-   double lastAMA = iCustom(nomIndice,0,"Downloads\\AMA",9,2,30,2,2,0,1);
-   double lastUpperChannel = iCustom(nomIndice,0,"Downloads\\TMA_Channel_End_Point",TMA_Period,0,100,TMA_K,0,1);
-   bool result = false;
-   
-   if( (lastAMA > lastUpperChannel) ) 
-       result = true;
-   return result;
-   
-}
-
-
-
-//-------------------------------------------------+
-//    L'AMA segnala il BUY 
-//-------------------------------------------------+
-bool isUpAMA(){
-
-   double lastAMA = iCustom(nomIndice,0,"Downloads\\AMA",9,2,30,2,2,1,1);
-   double prevAMA = iCustom(nomIndice,0,"Downloads\\AMA",9,2,30,2,2,1,2);
-   bool result = false;
-   
-   if( (prevAMA == 0) && (lastAMA > 0) ) 
-       result = true;
-   return result;
+   if( (actualPrice > actualSAR) && (Close[1] > oldSar_1) && (Close[2] > oldSar_2) && (Close[3] > oldSar_3) ) 
+      {drawNewEntryPoint(OP_BUY, targetPrice); return true;}
+   else return false;
    
 }
 
 
-//-------------------------------------------------+
-//    L'AMA segnala il SELL 
-//-------------------------------------------------+
-bool isDownAMA(){
-
-   double lastAMA = iCustom(nomIndice,0,"Downloads\\AMA",9,2,30,2,2,2,1);
-   double prevAMA = iCustom(nomIndice,0,"Downloads\\AMA",9,2,30,2,2,2,2);
-   bool result = false;
-   
-   if( (prevAMA == 0) && (lastAMA > 0) ) 
-       result = true;
-   return result;
-   
-}
 
 //-------------------------------------------------+
-//    Entro solo se il prezzo è migliorativo 
+//    Sono in un trend DOWN 
 //-------------------------------------------------+
-bool priceIsBetter(int ot){
-   if(!limitOrders) return true; // se non voglio usarla mi da sempre "ok"
-   int total = OrdersTotal();
-   double actualPrice = MarketInfo(nomIndice,MODE_BID);
-   double bestPrice = 0;
-   double minDistance = atr*3; 
-   bool result = false;
+bool isDownTrend(int shift=3){
+   /*
+   double fastMA = iMA(nomIndice,PERIOD_CURRENT,fastMA_period,0,MODE_EMA,PRICE_MEDIAN,0);
+   double slowMA = iMA(nomIndice,PERIOD_CURRENT,slowMA_period,0,MODE_SMMA,PRICE_MEDIAN,0);
    
-   for(int pos=0;pos<total;pos++)
-   {
-      
-      if(OrderSelect(pos,SELECT_BY_POS)==false) continue;
-      if ( (OrderMagicNumber() == SIGNATURE) && (OrderSymbol() == nomIndice) && (OrderType() == OP_BUY) && (OrderCloseTime() == 0) && (ot == OP_BUY) ) {
-         if (bestPrice == 0) bestPrice = OrderOpenPrice();
-         if (OrderOpenPrice() < bestPrice) bestPrice = OrderOpenPrice();
-      } 
-      if ((OrderMagicNumber() == SIGNATURE) && (OrderSymbol() == nomIndice) && (OrderType() == OP_SELL) && (OrderCloseTime() == 0) && (ot == OP_SELL) ) { 
-         if (bestPrice == 0) bestPrice = OrderOpenPrice();
-         if (OrderOpenPrice() > bestPrice) bestPrice = OrderOpenPrice();
-      } 
-   }
+   if (fastMA < slowMA) return true;
+   else return false;
+   */
+   double actualSAR = iSAR(nomIndice,PERIOD_CURRENT,sarStep,0.2,0);
+   double oldSar_1 = iSAR(nomIndice,PERIOD_CURRENT,sarStep,0.2,1);
+   double oldSar_2 = iSAR(nomIndice,PERIOD_CURRENT,sarStep,0.2,2);
+   double oldSar_3 = iSAR(nomIndice,PERIOD_CURRENT,sarStep,0.2,3);
+   double actualPrice = MarketInfo(nomIndice, MODE_BID);
+
+   // per tracciare il punto di ingresso buy
+   double actualATR = iATR(nomIndice,PERIOD_CURRENT,7,0);
+   double targetPrice = NormalizeDouble( (Low[1]+((High[1]-Low[1])/2)) +0.7*actualATR,Digits);
    
-   if(bestPrice==0) {result = true;}
-   else{
-      if((ot==OP_BUY) && (bestPrice>0) && (actualPrice < bestPrice-minDistance) ) result=true;
-      if((ot==OP_SELL) && (bestPrice>0) && (actualPrice > bestPrice+minDistance)) result=true;
-   }
-   
-   return result;       
-   
+   if( (actualPrice < actualSAR) && (Close[1] < oldSar_1) && (Close[2] < oldSar_2) && (Close[3] < oldSar_3) ) 
+      {drawNewEntryPoint(OP_SELL, targetPrice);return true;}
+   else return false;   
 }
+
+
 
 //-------------------------------------------------+
 //    Aggiungo un segno nel punto di ingresso 
@@ -300,6 +249,23 @@ bool drawNewEntryPoint(int ot, double targetPrice){
    return false;
 }
 
+// -----------------------------------------+
+//     Se raggiungo l'entry price
+// -----------------------------------------+
+bool isEntryReached(int ot){
+   string objName = "BuyPoint"+(string)Time[0];
+   if (ot==OP_SELL) objName="SellPoint"+(string)Time[0];
+   if(ObjectFind(0,objName) < 0) return false;
+   double actualPrice = MarketInfo(nomIndice, MODE_BID);
+   double entryPrice = ObjectGet(objName,OBJPROP_PRICE1);
+   bool result = false;
+   
+   if( (ot==OP_BUY) && (actualPrice < entryPrice) ) result = true;
+   if( (ot==OP_SELL) && (actualPrice > entryPrice) ) result = true;
+   
+   return result;
+   
+}
 
 
 //-------------------------------------------------+
@@ -346,8 +312,7 @@ bool isMin(){
    farMin = Low[farShift]; // suo valore
    
    
-   //if ((nearMin < farMin)  )return true; // senza guardare i minimi decrescenti
-   if ((nearMin < farMin) && (High[1] <= High[2]) )return true;  // guardando i minimi decrescenti (migliora P.F e R.A.)
+   if (nearMin < farMin) return true;
 
    else return false;
 
@@ -364,11 +329,10 @@ bool isMax(){
    nearShift = iHighest(nomIndice,PERIOD_CURRENT,MODE_HIGH,3,1); //posizione del massimo delle ultime tre barre partendo dalla 1
    nearMax = High[nearShift];  // valore del massimo delle ultime 3 barre partendo dalla 1
    
-   farShift = iHighest(nomIndice,PERIOD_CURRENT,MODE_HIGH,MinMax_distance,nearShift+1); // massimo delle MinMax_distance barre partendo da quella precedente al massimo near
+   farShift = iHighest(nomIndice,PERIOD_CURRENT,MODE_HIGH,MinMax_distance,nearShift+1); // massimo delle MinMax_distance barre partendo da quella successiva al minimo near
    farMax = High[farShift]; // suo valore
  
-   //if ((nearMax > farMax)  ) return true; // senza guardare i massimi crescenti
-   if ((nearMax > farMax) && (Low[1] >= Low[2]) ) return true; // guardando i massimi crescenti (migliora P.F e R.A.)
+   if (nearMax > farMax) return true;
   
    else return false;
 
@@ -449,13 +413,17 @@ bool openOrder(int ot, double sz){
    int ticket = -1;
    double tp = 0, sl = 0, prz =0;
    color c = clrBlue;
-   if (ot == OP_BUY) {prz = MarketInfo(nomIndice,MODE_ASK); sl = Low[iLowest(nomIndice,PERIOD_CURRENT,MODE_LOW,10,1)]-200*Point;   c = clrBlue;}
-   if (ot == OP_SELL){prz = MarketInfo(nomIndice,MODE_BID); sl = High[iHighest(nomIndice,PERIOD_CURRENT,MODE_HIGH,10,1)]+200*Point; c = clrRed; }
+//   if (ot == OP_BUY) {prz = MarketInfo(nomIndice,MODE_ASK); tp = prz+((prz-Low[1])*10); sl = Low[iLowest(nomIndice,PERIOD_CURRENT,MODE_LOW,3,1)]-2*Point;   c = clrBlue;}
+//   if (ot == OP_SELL){prz = MarketInfo(nomIndice,MODE_BID); tp = prz-((High[1]-prz)*10); sl = High[iHighest(nomIndice,PERIOD_CURRENT,MODE_HIGH,3,1)]+2*Point; c = clrRed; }
 
-   //sz = getSize(2,MathAbs(tp-sl)/Point);
-   sl=0;
-   ticket = OrderSend(nomIndice,ot,sz,prz,2,sl,tp,COMMENT ,SIGNATURE,0,c);
-
+   // con ingresso nuovo
+   if (ot == OP_BUY) {prz = MarketInfo(nomIndice,MODE_ASK); sl = NormalizeDouble(iSAR(nomIndice,PERIOD_CURRENT,sarStep,0.2,0)-2*Point,Digits); tp = prz+((prz-sl)*10);  c = clrBlue;}
+   if (ot == OP_SELL){prz = MarketInfo(nomIndice,MODE_BID); sl = NormalizeDouble(iSAR(nomIndice,PERIOD_CURRENT,sarStep,0.2,0)+2*Point,Digits); tp = prz-((sl-prz)*10); c = clrRed; }
+   
+  // while(ticket<0){
+      ticket = OrderSend(nomIndice,ot,sz,prz,2,sl,tp,COMMENT ,SIGNATURE,0,c);
+      if(ticket<0) Print("Type: "+ot+" - price:"+prz+" - tp: "+tp+" - sl: "+sl);
+  // }
 
    return true;
 }
@@ -477,29 +445,17 @@ bool closeOrder(int tkt){
 
 
 //--------------------------------------------------------+
-//                Chiusura in base al TMA 
+//                Chiusura in base al SAR 
 //--------------------------------------------------------+
-bool stoppedByTMA(int ot){
-   double actualTMA = 0;
-   if(ot==OP_BUY)  {actualTMA = iCustom(nomIndice,0,"Downloads\\TMA_Channel_End_Point",TMA_Period,0,100,TMA_K,0,1);}
-   if(ot==OP_SELL) {actualTMA = iCustom(nomIndice,0,"Downloads\\TMA_Channel_End_Point",TMA_Period,0,100,TMA_K,2,1);}
+bool stoppedBySAR(int ot){
+   double actualSAR = iSAR(nomIndice,PERIOD_CURRENT,sarStep,0.2,0);
    double actualPrice = MarketInfo(nomIndice,MODE_BID);
    bool result = false;
    
-   if ( (ot == OP_BUY)  && (actualPrice > actualTMA) ) result = true;
-   if ( (ot == OP_SELL) && (actualPrice < actualTMA) ) result = true;
+   if ( (ot == OP_BUY)  && (actualPrice < actualSAR) ) result = true;
+   if ( (ot == OP_SELL) && (actualPrice > actualSAR) ) result = true;
    
    return result;
-}
-
-
-
-//-----------------------------------------------------------------+
-// Verifica se è venerdì sera: alle 21:30 chiudo tutto
-//-----------------------------------------------------------------+
-bool isFridayNight(){
-   if( (DayOfWeek() == 5) && (TimeHour(TimeCurrent()) == 20) ) return true;
-   else return false;
 }
 
 //-----------------------------------------------------------------+
@@ -534,42 +490,14 @@ bool partialClose(int tkt){
 
    double halfLots = NormalizeDouble( (OrderLots()/2), digits);
    
-   //if(!OrderModify(tkt,OrderOpenPrice(),OrderOpenPrice(),OrderTakeProfit(),OrderExpiration())) {Print("Errore nella modifica dello SL ordine: "+(string)GetLastError()); return false;}
-   // INFO : La chiusura a pareggio peggiora leggermente le performance. Non di molto, ma le peggiora.
-   if(!OrderClose(tkt,halfLots,price,2,c)) {Print("Errore nella chiusura PARZIALE di un ordine: "+(string)GetLastError()); return false;}
+   
+   if(!OrderClose(tkt,halfLots,price,2,c)) {Print("Errore nella chiusura PARZIALE di un ordine: "+(string)GetLastError()); return false;};
    
    return true;
 }
 
-//------------------------------------------------------------+
-//--------------- SIZE AUTOMATICA ----------------------------+
-//------------------------------------------------------------+ 
-double getSize(int risk, double distance)
-{
 
-   //if (usePercentageRisk == false) return POWER;
-   
-   double equity = AccountEquity();
-   double amountRisked = equity/100*risk;
-   double finalSize = 0;
-   double tickValue = MarketInfo(nomIndice,MODE_TICKVALUE); //valore di un tick con un lotto 
-   double minLot = MarketInfo(nomIndice,MODE_MINLOT);
-   
-   distance = distance/Point; //la distanza deve sempre essere un intero
-      
-   finalSize = amountRisked/(tickValue*distance);
-   
-   // arrotondo i lotti in base a quello che può accettare questo strumento
-   if (minLot == 1) finalSize = NormalizeDouble(finalSize,0);
-   if (minLot == 0.1) finalSize = NormalizeDouble(finalSize,1);
-   if (minLot == 0.01) finalSize = NormalizeDouble(finalSize,2);
-   
-   
-   //Print("getSize() - Risk="+(string)risk+" - Distance="+(string)distance+" - amountRisked="+(string)amountRisked+" - finalSize="+(string)finalSize);
-   if (finalSize < minLot) finalSize = minLot;
-   return finalSize;
 
-}
 
 // ==================================
 //            Screen Log 
