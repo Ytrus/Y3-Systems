@@ -13,24 +13,27 @@
 
 
 string bot_name = "Y3_Yoyo";
-string nomIndice = "GER30"; //sovrascritto dopo in init()
+string nomIndice = "EURUSD"; //sovrascritto dopo in init()
 
-extern int SIGNATURE = 0077330;
+extern int SIGNATURE = 777333;
 extern string COMMENT = "Y3_Yoyo";
-extern double POWER = 20;
+extern double POWER = 0.1;
 extern bool partialCloseEnabled = true;
-extern int atrPeriod = 14;
-extern double atrMultiplier = 3.0;
-extern int startingHour = 8;
-extern int endingHour = 23;
-extern double minAMADegree = 0.0;
-extern int protectionStartDistance = 100;
-extern int protectionCloseDistance = 0;
-int MinMax_distance = 10;
+int atrPeriod = 14;
+double atrMultiplier = 6.0;
+bool usePercentageRisk = false;
+int maPeriod = 100;
+extern int distancePeriod = 14;
+extern int martinMultiplier = 2;
+int protectionStartDistance = 100;
+int protectionCloseDistance = 0;
+extern string openHours = "8,9,10,11,12,13,14,15,16,17";                            
+
 double atr = 0;
-// ----- enter conditions array -----
-bool buyConditions[5]; 
-bool sellConditions[5]; 
+double entryDistance = 0;
+datetime lastAnalizedBarTime;       // per eseguire alcuni controlli una sola volta per barra: inizializzato in init
+bool enabledHours[24];              // array con le singole ore in cui c'è indicato se tradare o no (true o false)
+
 
 
 //+------------------------------------------------------------------+
@@ -40,7 +43,8 @@ int OnInit()
   {
 //---
    nomIndice = Symbol();
-   
+   setHours(); //imposto le ore in cui è consentito fare trading
+   createDebugLabel(); // inizializzo la finestra di debug
 //---
    return(INIT_SUCCEEDED);
   }
@@ -59,26 +63,29 @@ void OnTick()
 {
 //---
    atr = NormalizeDouble(iATR(nomIndice,PERIOD_CURRENT,atrPeriod,1),Digits);
-   
-   // alle 21:00 chiudo comunque tutto, aperti e pendenti
-   //timeToCloseAll();
-
-
-     
+   if (iBarShift(nomIndice,0,lastAnalizedBarTime,false) > 0 ) //(Volume[0] == 1)
+   {
+      entryDistance = getDistance(distancePeriod);
+      //aggiorno lastAnalizedBarTime in modo che fino alla prossima barra tutto questo non venga eseguito
+      lastAnalizedBarTime = Time[0];
+      
+   }
 
    // ===============
    // Buy conditions
    // ===============
 
    
-   if(   (isUpFromAMA())
-      && (TimeHour(TimeCurrent()) >= startingHour)
-      && (TimeHour(TimeCurrent()) < endingHour)
+   if(   (isDownFromMA())
       && (!existOpendedAndClosedOnThisBar(1))
-      && (!existOrderOnThisBar(OP_BUY))
-      && (!existOrder(OP_BUY))
+      && (!existOrderOnThisBar(OP_BUY)) 
+      //&& (!isFirstBreakout(OP_BUY)) 
+      //&& (!existOrder(OP_BUY))
+      //&& ((medianTargetIsLessThenZero(OP_BUY)) && (!isGoingTooFast(OP_BUY)))  --nel 2016 perde e basta. non ho provato altri anni.
+      && (medianTargetIsLessThenZero(OP_BUY))
+      && (enabledHours[Hour()])
      )   {
-         openOrder(OP_BUY, POWER);
+        openOrder(OP_BUY, POWER);
      }
 
    for(int pos=0;pos<OrdersTotal();pos++)
@@ -91,7 +98,9 @@ void OnTick()
       
       // chiusura SINGOLO ordine 
       if ( //(protector(OrderTicket(), protectionStartDistance, protectionCloseDistance))            // se ha raggiunto una certa percentuale di profitto e poi torna indietro
-          (stoppedByAMA(OP_BUY))
+             (stoppedByMA(OP_BUY))
+             //|| (stoppedByBand(OP_BUY))
+          //|| (brokeOpenBar(OP_BUY, iBarShift(nomIndice,PERIOD_CURRENT,OrderOpenTime(),false)))
       ) closeOrder(OrderTicket());
       
       
@@ -108,12 +117,14 @@ void OnTick()
    // ===============
 
    
-   if(   (isDownFromAMA())
-      && (TimeHour(TimeCurrent()) >= startingHour)
-      && (TimeHour(TimeCurrent()) < endingHour)      
+   if(   (isUpFromMA())
       && (!existOpendedAndClosedOnThisBar(1))
       && (!existOrderOnThisBar(OP_SELL))
-      && (!existOrder(OP_SELL))
+      //&& (!isFirstBreakout(OP_SELL)) 
+      //&& (!existOrder(OP_SELL))
+      //&& (medianTargetIsLessThenZero(OP_SELL) && (!isGoingTooFast(OP_SELL)))  //nel 2016 perde e basta. Non ho provato altri anni.
+      && (medianTargetIsLessThenZero(OP_SELL))
+      && (enabledHours[Hour()])
      )   {
          openOrder(OP_SELL, POWER);
      }
@@ -128,8 +139,9 @@ void OnTick()
       
       // chiusura SINGOLO ordine 
       if (  //(protector(OrderTicket(), protectionStartDistance, protectionCloseDistance))            // se ha raggiunto una certa percentuale di profitto e poi torna indietro
-          (stoppedByAMA(OP_SELL))
-
+             (stoppedByMA(OP_SELL))
+             //|| (stoppedByBand(OP_SELL))
+         //|| (brokeOpenBar(OP_SELL, iBarShift(nomIndice,PERIOD_CURRENT,OrderOpenTime(),false)))
       ) closeOrder(OrderTicket());
       
       
@@ -142,7 +154,7 @@ void OnTick()
 
    
    // screen Log
-   //screenLog();
+   screenLog();
    
 }
 //+------------------------------------------------------------------+
@@ -158,14 +170,14 @@ void OnTick()
 //-------------------------------------------------+
 //    il prezzo si è allontanato UP
 //-------------------------------------------------+
-bool isUpFromAMA(){
+bool isUpFromMA(){
    
    double actualPrice = MarketInfo(nomIndice, MODE_BID);
-   double AMAzero  = NormalizeDouble(iCustom(nomIndice,0,"Downloads\\AMA",9,2,30,2,2,0,0),Digits);
-   double distanceFromAMA = NormalizeDouble(actualPrice-AMAzero,Digits);
-   double requiredDistance = NormalizeDouble(atr*atrMultiplier,Digits);
+   double MAzero  = NormalizeDouble(iCustom(nomIndice,0,"Downloads\\AMA",9,2,30,2,2,0,0),Digits);
+   double distanceFromMA = NormalizeDouble(actualPrice-MAzero,Digits);
+   double requiredDistance = entryDistance;// NormalizeDouble(atr*atrMultiplier,Digits);
    bool result = false;
-   if (distanceFromAMA >= requiredDistance) {result = true;}    //Print("***********   isUpFromAMA   atr:"+atr+"   -  distanceFromAMA:"+distanceFromAMA+"   - requiredDistance:"+requiredDistance+"   **********");}
+   if (distanceFromMA >= requiredDistance) {result = true;}    //Print("***********   isUpFromAMA   atr:"+atr+"   -  distanceFromAMA:"+distanceFromAMA+"   - requiredDistance:"+requiredDistance+"   **********");}
    
    return result;
    
@@ -175,14 +187,14 @@ bool isUpFromAMA(){
 //-------------------------------------------------+
 //    il prezzo si è allontanato UP
 //-------------------------------------------------+
-bool isDownFromAMA(){
+bool isDownFromMA(){
    
    double actualPrice = MarketInfo(nomIndice, MODE_BID);
-   double AMAzero  = NormalizeDouble(iCustom(nomIndice,0,"Downloads\\AMA",9,2,30,2,2,0,0),Digits);
-   double distanceFromAMA = NormalizeDouble(AMAzero-actualPrice,Digits);
-   double requiredDistance = NormalizeDouble(atr*atrMultiplier,Digits);
+   double MAzero  = NormalizeDouble(iCustom(nomIndice,0,"Downloads\\AMA",9,2,30,2,2,0,0),Digits);
+   double distanceFromMA = NormalizeDouble(MAzero-actualPrice,Digits);
+   double requiredDistance = entryDistance;//NormalizeDouble(atr*atrMultiplier,Digits);
    bool result = false;
-   if (distanceFromAMA >= requiredDistance) {result = true;}//    Print("***********   isDownFromAMA   atr:"+atr+"   -  distanceFromAMA:"+distanceFromAMA+"   - requiredDistance:"+requiredDistance+"   **********");}
+   if (distanceFromMA >= requiredDistance) {result = true;}//    Print("***********   isDownFromAMA   atr:"+atr+"   -  distanceFromAMA:"+distanceFromAMA+"   - requiredDistance:"+requiredDistance+"   **********");}
 
    
    return result;
@@ -190,24 +202,150 @@ bool isDownFromAMA(){
 }
 
 
+//-------------------------------------------------+
+//    la media raggiunge il prezzo di apertura
+//-------------------------------------------------+
+bool medianTargetIsLessThenZero(int ot){
+   bool result = false;  
+   int total = OrdersTotal();
+   double lots = 0;
+   double opens = 0;
+   double medianOpen = 0;
+   double lastBestPrice = 0;
+   double MAzero  = NormalizeDouble(iCustom(nomIndice,0,"Downloads\\AMA",9,2,30,2,2,0,0),Digits);
+   double actualPrice = MarketInfo(nomIndice, MODE_BID);
+   for(int pos=0;pos<total;pos++)
+   {
+      if(OrderSelect(pos,SELECT_BY_POS)==false) continue;
+      if ( (OrderMagicNumber() == SIGNATURE) && (OrderSymbol() == nomIndice) && (OrderType() == OP_BUY) && (OrderCloseTime() == 0) && (ot == OP_BUY) )
+         {
+            if(lots==0) { lastBestPrice=OrderOpenPrice(); }
+            else        { if(OrderOpenPrice()<lastBestPrice) lastBestPrice=OrderOpenPrice(); }
+            lots+=OrderLots(); opens+=OrderOpenPrice()*OrderLots();
+         }
+      if ((OrderMagicNumber() == SIGNATURE) && (OrderSymbol() == nomIndice) && (OrderType() == OP_SELL) && (OrderCloseTime() == 0) && (ot == OP_SELL) )
+         {
+            if(lots==0) { lastBestPrice=OrderOpenPrice(); }
+            else        { if(OrderOpenPrice()>lastBestPrice) lastBestPrice=OrderOpenPrice(); }
+            lots+=OrderLots(); opens+=OrderOpenPrice()*OrderLots();
+         }   }
+   
+   if(lots>0) {
+      //medianOpen = NormalizeDouble(opens/lots,Digits);
+      if( (ot==OP_BUY) && (lastBestPrice > MAzero)  && (actualPrice < lastBestPrice) ) result = true;
+      if( (ot==OP_SELL) && (lastBestPrice < MAzero) && (actualPrice > lastBestPrice) ) result = true;
+   }
+   else {result = true;} // non avendo ordini attivi, posso aprirne di nuovi
+   
+   return result;    
+   
+}
+
+// =============================================================
+//      Non prendo il primo segnale, ma uno dei successivi
+// =============================================================
+bool isFirstBreakout(int ot){  
+   if(ObjectFind(0,"BuyPoint"+(string)Time[3]) < 0) return true; //se sono appena partito, non ho storico di segnali
+   bool result = true;
+   bool wasSignal = false;
+   if(ot==OP_BUY){
+      if(Low[1] <  ObjectGetDouble(0,"BuyPoint"+(string)Time[1],OBJPROP_PRICE) ) {wasSignal = true;}
+      if(Low[2] <  ObjectGetDouble(0,"BuyPoint"+(string)Time[2],OBJPROP_PRICE) ) {wasSignal = true;}
+      if(Low[3] <  ObjectGetDouble(0,"BuyPoint"+(string)Time[3],OBJPROP_PRICE) ) {wasSignal = true;}
+   }
+   if(ot==OP_SELL){
+      if(High[1] >  ObjectGetDouble(0,"SellPoint"+(string)Time[1],OBJPROP_PRICE) ) {wasSignal = true;}
+      if(High[2] >  ObjectGetDouble(0,"SellPoint"+(string)Time[2],OBJPROP_PRICE) ) {wasSignal = true;}
+      if(High[3] >  ObjectGetDouble(0,"SellPoint"+(string)Time[3],OBJPROP_PRICE) ) {wasSignal = true;}
+   }
+   
+   if(wasSignal) result = false;
+   
+   return result;
+   
+}
+
 
 //-------------------------------------------------+
-//    Il prezzo tocca l'ama
+//    Il prezzo sta scappando velocemente (test)
 //-------------------------------------------------+
-bool stoppedByAMA(int ot){
+bool isGoingTooFast(int ot){
+   // considero il prezzo veloce se anche la barra precedente attraversava la banda
+   bool result = false;
+   double lastPrice = 0;
+   double band  = 0;
+   
+   if(ot==OP_BUY) {
+      band = NormalizeDouble(iCustom(nomIndice,0,"Downloads\\AMA",9,2,30,2,2,0,1),Digits) - entryDistance; //lower band
+      lastPrice = Low[1];
+      if(lastPrice < band) result = true;
+   }
+   else{
+      band = NormalizeDouble(iCustom(nomIndice,0,"Downloads\\AMA",9,2,30,2,2,0,1),Digits) + entryDistance; //upper band
+      lastPrice = High[1];
+      if(lastPrice > band) result = true;   
+   }
+   
+   return result;
+}
+
+
+
+//-------------------------------------------------+
+//    Il prezzo tocca l'ma
+//-------------------------------------------------+
+bool stoppedByMA(int ot){
 
    double actualPrice = MarketInfo(nomIndice, MODE_BID);   
-   double AMAzero = iCustom(nomIndice,0,"Downloads\\AMA",9,2,30,2,2,0,1);
+   double MAzero = iCustom(nomIndice,0,"Downloads\\AMA",9,2,30,2,2,0,1);
+   //double MAzero  = NormalizeDouble(iMA(nomIndice,PERIOD_CURRENT,maPeriod,0,MODE_SMMA,PRICE_TYPICAL,0),Digits);
    
    
    bool result = false;
    
  
-   if((ot==OP_BUY) && (actualPrice < AMAzero)) result = true;
-   if((ot==OP_SELL) && (actualPrice > AMAzero)) result = true;
+   if((ot==OP_BUY) && (actualPrice > MAzero)) result = true;
+   if((ot==OP_SELL) && (actualPrice < MAzero)) result = true;
 
    return result;
    
+}
+
+
+
+//-------------------------------------------------+
+//    Il prezzo tocca la banda opposta
+//-------------------------------------------------+
+bool stoppedByBand(int ot){
+
+   double actualPrice = MarketInfo(nomIndice, MODE_BID);   
+   double band = iCustom(nomIndice,0,"Downloads\\AMA",9,2,30,2,2,0,1) + entryDistance;  //upper band
+   if (ot == OP_SELL) band = iCustom(nomIndice,0,"Downloads\\AMA",9,2,30,2,2,0,1) - entryDistance;     //lower band
+   bool result = false;
+   
+ 
+   if((ot==OP_BUY) && (actualPrice > band)) result = true;
+   if((ot==OP_SELL) && (actualPrice < band)) result = true;
+
+   return result;
+   
+}
+
+
+//-------------------------------------------------+
+//    Ho rotto il max precedente 
+//-------------------------------------------------+
+
+bool brokeOpenBar(int ot, int shift){
+   double openLow = Low[shift];
+   double openHigh = High[shift];
+   double actualPrice = MarketInfo(nomIndice, MODE_BID);
+   bool result = false;
+
+   if((ot == OP_BUY) && (actualPrice < openLow)) {result = true;}
+   if((ot == OP_SELL) && (actualPrice > openHigh)) {result = true;}
+
+   return result;
 }
 
 
@@ -233,48 +371,7 @@ bool drawNewEntryPoint(int ot, double targetPrice){
 
 
 
-//-------------------------------------------------+
-//    Ho appena passato un minimo locale 
-//-------------------------------------------------+
-bool isMin(){
 
-   double nearMin, farMin;
-   int nearShift, farShift;
-   
-   nearShift = iLowest(nomIndice,PERIOD_CURRENT,MODE_LOW,3,1); //posizione del minimo delle ultime tre barre partendo dalla 1
-   nearMin = Low[nearShift]; // valore del minimo delle ultime 3 barre partendo dalla 1
-   
-   farShift = iLowest(nomIndice,PERIOD_CURRENT,MODE_LOW,MinMax_distance,nearShift+1); // minimo delle MinMax_distance barre partendo da quella successiva al minimo near
-   farMin = Low[farShift]; // suo valore
-   
-   
-   //if ((nearMin < farMin)  )return true; // senza guardare i minimi decrescenti
-   if ((nearMin < farMin) && (High[1] <= High[2]) )return true;  // guardando i minimi decrescenti (migliora P.F e R.A.)
-
-   else return false;
-
-}
-
-//-------------------------------------------------+
-//    Sono su un massimo locale 
-//-------------------------------------------------+
-bool isMax(){
-
-   double nearMax, farMax;
-   int nearShift, farShift;
-   
-   nearShift = iHighest(nomIndice,PERIOD_CURRENT,MODE_HIGH,3,1); //posizione del massimo delle ultime tre barre partendo dalla 1
-   nearMax = High[nearShift];  // valore del massimo delle ultime 3 barre partendo dalla 1
-   
-   farShift = iHighest(nomIndice,PERIOD_CURRENT,MODE_HIGH,MinMax_distance,nearShift+1); // massimo delle MinMax_distance barre partendo da quella precedente al massimo near
-   farMax = High[farShift]; // suo valore
- 
-   //if ((nearMax > farMax)  ) return true; // senza guardare i massimi crescenti
-   if ((nearMax > farMax) && (Low[1] >= Low[2]) ) return true; // guardando i massimi crescenti (migliora P.F e R.A.)
-  
-   else return false;
-
-}
 
 
 //-------------------------------------------------+
@@ -352,17 +449,16 @@ bool openOrder(int ot, double sz){
    double tp = 0, sl = 0, prz =0;
    color c = clrBlue;
    double spread = MarketInfo(nomIndice,MODE_SPREAD);
-   double AMAzero = iCustom(nomIndice,0,"Downloads\\AMA",9,2,30,2,2,0,1);
+
    if (ot == OP_BUY) {  prz = MarketInfo(nomIndice,MODE_ASK);
-                        sl  = NormalizeDouble(AMAzero,Digits); 
+                        
                      }
    if (ot == OP_SELL){  prz = MarketInfo(nomIndice,MODE_BID); 
-                        sl  = NormalizeDouble(AMAzero,Digits);
+                       
                      }
 
-   sz = getSize(2,MathAbs(prz-sl)/Point);
-   //sl = 0;
-   //tp = 0;
+   sz = getSize(POWER,MathAbs(prz-sl)/Point);
+   sz = martinOnOpen(sz);
    ticket = OrderSend(nomIndice,ot,sz,prz,2,sl,tp,COMMENT ,SIGNATURE,0,c);
    
 
@@ -370,34 +466,73 @@ bool openOrder(int ot, double sz){
 }
 
 //--------------------------------------------------------+
-//             Martingalone 
+//             Martingalone sullo storico
 //--------------------------------------------------------+
 double Martin(double sz){
    int total = OrdersTotal();
    double newSize = sz;
    bool alreadyOpened = false;
+   double maxLots = MarketInfo(nomIndice,MODE_MAXLOT);
+      
    // c'è già un ordine aperto con size > sz?   
    for(int pos=0;pos<total;pos++)
    {      
       if(OrderSelect(pos,SELECT_BY_POS)==false) continue;
       if ((OrderMagicNumber() == SIGNATURE) && (OrderSymbol() == nomIndice) && ((OrderType() == OP_SELL) || (OrderType() == OP_BUY)) && (OrderCloseTime() == 0) ){
-         if (OrderLots() > sz) return sz;
+         if (OrderLots() >= sz) return sz;
       }
    }
    
    // se arrivo qui, non ho un ordine martingalato. Conto le perdite 
    total = OrdersHistoryTotal();
+   int i = 0;
    for(int pos=total-20;pos<total;pos++)
-   {      
+   {  
+        
       if(OrderSelect(pos,SELECT_BY_POS,MODE_HISTORY)==false) continue;
       if ((OrderMagicNumber() == SIGNATURE) && (OrderSymbol() == nomIndice) && ((OrderType() == OP_SELL) || (OrderType() == OP_BUY)) && (OrderCloseTime() != 0) ){
-         Print("**************  Martin: ordine "+OrderTicket()+" -> "+OrderProfit()+" **************");
-         if (OrderProfit() > 0) {newSize = sz;}
-         else {newSize = newSize+sz;}
+         //Print("**************  Martin: ordine "+OrderTicket()+" -> "+OrderProfit()+" **************");
+         if (OrderProfit() > 0) {i=0; newSize = sz;}
+         else {   i++; 
+                  //newSize = newSize+sz; //falso martingale: somma sz ogni volta invece di moltiplicare
+                  if(i>0) {newSize = newSize*martinMultiplier;} //vero martingale. utilizzare valore di i per fare iniziare le moltiplicazioni solo da un certo numero di sconfitte in poi
+              }
       }
    }
+
+   if (newSize > maxLots) newSize = maxLots;
+   
    return newSize;
 }
+
+
+
+
+//--------------------------------------------------------+
+//             Martingalone sugli ordini aperti
+//--------------------------------------------------------+
+double martinOnOpen(double sz){
+   int total = OrdersTotal();
+   double newSize = sz;
+   bool alreadyOpened = false;
+   double maxLots = MarketInfo(nomIndice,MODE_MAXLOT);
+      
+   // c'è già un ordine aperto con size > sz?   
+   for(int pos=0;pos<total;pos++)
+   {      
+      if(OrderSelect(pos,SELECT_BY_POS)==false) continue;
+      if ((OrderMagicNumber() == SIGNATURE) && (OrderSymbol() == nomIndice) && ((OrderType() == OP_SELL) || (OrderType() == OP_BUY)) && (OrderCloseTime() == 0) ){
+         {newSize = newSize*martinMultiplier;}
+      }
+   }
+   
+
+   if (newSize > maxLots) newSize = maxLots;
+   
+   return newSize;
+}
+
+
 
 
 //--------------------------------------------------------+
@@ -485,7 +620,6 @@ bool closeAllBuyOrders(){
       
       if(OrderSelect(pos,SELECT_BY_POS)==false) continue;
       if ((OrderMagicNumber() == SIGNATURE) && (OrderSymbol() == nomIndice) && (OrderType() == OP_BUY) && (OrderCloseTime() == 0) ) {
-         Print("******* closeAllBuyOrders: tkt "+OrderTicket());
          closeOrder(OrderTicket());
          pos--;
          
@@ -507,7 +641,7 @@ bool closeOrder(int tkt){
    
    if(OrderType() == OP_SELL) price = MarketInfo(nomIndice,MODE_ASK);
    
-   if(!OrderClose(tkt,OrderLots(),price,2,c)) {Print("Errore nella chiusura di un ordine: "+(string)GetLastError()); return false;};
+   if(!OrderClose(tkt,OrderLots(),price,0,c)) {Print("Errore nella chiusura di un ordine: "+(string)GetLastError()); return false;};
    
    return true;
 }
@@ -543,7 +677,7 @@ double moveTakeProfit(int ot, double tp){
       
       if(OrderSelect(pos,SELECT_BY_POS)==false) continue;
       if ((OrderMagicNumber() == SIGNATURE) && (OrderSymbol() == nomIndice) && (OrderType() == ot) && (OrderCloseTime() == 0) && (OrderTakeProfit() != tp)) {
-         OrderModify(OrderTicket(),OrderOpenPrice(),OrderStopLoss(),tp,0,clrBeige);
+         bool r = OrderModify(OrderTicket(),OrderOpenPrice(),OrderStopLoss(),tp,0,clrBeige);
       }
    }
    
@@ -553,34 +687,8 @@ double moveTakeProfit(int ot, double tp){
 
 
 
-//--------------------------------------------------------+
-//                Chiusura in base al SAR 
-//--------------------------------------------------------+
-/*
-bool stoppedByTMA(int ot){
-   double actualTMA = 0;
-   if(ot==OP_BUY)  {actualTMA = iCustom(nomIndice,0,"Downloads\\TMA_Channel_End_Point",TMA_Period,0,100,3,0,1);}
-   if(ot==OP_SELL) {actualTMA = iCustom(nomIndice,0,"Downloads\\TMA_Channel_End_Point",TMA_Period,0,100,3,2,1);}
-   double actualPrice = MarketInfo(nomIndice,MODE_BID);
-   bool result = false;
-   
-   if ( (ot == OP_BUY)  && (actualPrice > actualTMA) ) result = true;
-   if ( (ot == OP_SELL) && (actualPrice < actualTMA) ) result = true;
-   
-   return result;
-}
-*/
 
-//-----------------------------------------------------------------+
-// Verifica: alle 20:50 (orario server, 21 in italia) chiudo tutto
-//-----------------------------------------------------------------+
-bool timeToCloseAll(){
-   if (TimeHour(TimeCurrent()) >= endingHour) {
-      closeAllBuyOrders();
-      closeAllSellOrders();
-   }
-   return true;
-}
+
 
 //-----------------------------------------------------------------+
 // Verifica se è venerdì sera: alle 21:30 chiudo tutto
@@ -632,10 +740,10 @@ bool partialClose(int tkt){
 //------------------------------------------------------------+
 //--------------- SIZE AUTOMATICA ----------------------------+
 //------------------------------------------------------------+ 
-double getSize(int risk, double distance)
+double getSize(double risk, double distance)
 {
 
-   //if (usePercentageRisk == false) return POWER;
+   if (usePercentageRisk == false) return POWER;
    
    double equity = AccountEquity();
    double amountRisked = equity/100*risk;
@@ -688,10 +796,10 @@ bool protector(int tkt,int protectionStart, int protectionClose)
       profit = MathAbs(OrderOpenPrice() - OrderTakeProfit());                    // Guardo la distanza del TP per proteggerne una percentuale
       activationDistance = NormalizeDouble(profit/100*protectionStart, Digits);  // distanza a cui iniziare a proteggere la posizione, in pips
       closeDistance = NormalizeDouble(profit/100*protectionClose, Digits);       // distanza dello stopProfit, in pips
-     Print("***********  shift:"+shift+"   -    profit:"+profit+"    -    activationDistance:"+activationDistance+"    -    closeDistance:"+closeDistance+"   *************");
+     //Print("***********  shift:"+shift+"   -    profit:"+profit+"    -    activationDistance:"+activationDistance+"    -    closeDistance:"+closeDistance+"   *************");
       if ((OrderType() == OP_BUY) && (shift > 0)) // buy order
       {
-         max_ = High[iHighest(nomIndice,PERIOD_M1,MODE_HIGH,shift,0)]; Print("isCameBack BUY: profit="+profit+" -- max_="+max_+" -- shift="+shift);
+         max_ = High[iHighest(nomIndice,PERIOD_M1,MODE_HIGH,shift,0)]; //Print("isCameBack BUY: profit="+profit+" -- max_="+max_+" -- shift="+shift);
          if ( (max_ - OrderOpenPrice() >= activationDistance) && (MarketInfo(nomIndice,MODE_BID) <= (OrderOpenPrice()+closeDistance) ) )
          {result = true; Print("Protector: Buy ", tkt, " is Coming Back: CHIUDO");}
       }
@@ -699,7 +807,7 @@ bool protector(int tkt,int protectionStart, int protectionClose)
  
       if ((OrderType() == OP_SELL) && (shift > 0) ) // sell order
       {
-         min_ = Low[iLowest(nomIndice,PERIOD_M1,MODE_LOW,shift,0)]; Print("isCameBack SELL: profit="+profit+" -- min_="+min_+" -- shift="+shift);
+         min_ = Low[iLowest(nomIndice,PERIOD_M1,MODE_LOW,shift,0)]; //Print("isCameBack SELL: profit="+profit+" -- min_="+min_+" -- shift="+shift);
          if ((OrderOpenPrice() - min_ >= activationDistance) && (MarketInfo(nomIndice,MODE_BID) >= (OrderOpenPrice()-closeDistance) ) )
          {result = true; Print("Protector: Sell ", tkt, " is Coming Back: CHIUDO");}
       }
@@ -709,6 +817,109 @@ bool protector(int tkt,int protectionStart, int protectionClose)
    return result;
 
 }
+
+
+// ======================================================
+//      Distanza dalla media per entrare contrarian
+// ======================================================
+double getDistance(int shift){
+   if(shift > Bars) shift = Bars;
+   double maValue = 0;
+   double upDistance = 0;
+   double downDistance = 0;
+   double tempDistance = 0;
+   double maxDistance = 0;
+   double result = 0;
+   
+   for(int i=1; i<shift; i++){
+      //maValue = NormalizeDouble(iMA(nomIndice,PERIOD_CURRENT,maPeriod,0,MODE_SMMA,PRICE_TYPICAL,i),Digits);
+      maValue = NormalizeDouble(iCustom(nomIndice,0,"Downloads\\AMA",9,2,30,2,2,0,i),Digits);
+      upDistance = MathAbs(High[i]-maValue);
+      downDistance = MathAbs(Low[i]-maValue);
+      if (upDistance>downDistance) tempDistance=upDistance;
+      else tempDistance=downDistance;
+      if (tempDistance > maxDistance) maxDistance = tempDistance;
+   }
+   
+   result = NormalizeDouble((maxDistance/10)*9,Digits);
+   //result = NormalizeDouble(result*1.5,Digits);  //test con 2x e 1.5x hanno dato pessimi risultati. Peggiornativissimi!
+
+   // disegno i segni le bande   
+   maValue = NormalizeDouble(iCustom(nomIndice,0,"Downloads\\AMA",9,2,30,2,2,0,1),Digits);
+   drawNewEntryPoint(OP_BUY, maValue-result);
+   drawNewEntryPoint(OP_SELL, maValue+result);
+   
+   return result;
+   
+}
+
+
+
+bool setHours(){
+   // creo un array temporaneo con le ore indicate dall'utente
+   string taResult[];
+   ushort sep=StringGetCharacter(",",0);
+   StringSplit(openHours,sep,taResult);
+
+   // in ogni ora metto true se ho quell'ora nell'array taResult
+   for (int i=0; i<ArraySize(enabledHours); i++){
+      enabledHours[i] = false;
+      for (int b=0; b<ArraySize(taResult); b++){
+         if ((int)taResult[b] == i) enabledHours[i] = true;
+      }
+   }
+   
+   return true;
+}
+
+
+
+// ==================================
+//           Debug Label 
+// ==================================
+bool createDebugLabel(){
+   string objName = "debug Label";
+   int chart_ID = 0;
+   color clr = clrOrange;
+   
+   if(ObjectFind(0,objName) < 0) 
+   {
+      ObjectCreate(chart_ID,objName,OBJ_LABEL,0,0,0);
+      //--- set label coordinates 
+      ObjectSetInteger(chart_ID,objName,OBJPROP_XDISTANCE,100); 
+      ObjectSetInteger(chart_ID,objName,OBJPROP_YDISTANCE,20); 
+      //--- set the chart's corner, relative to which point coordinates are defined 
+      ObjectSetInteger(chart_ID,objName,OBJPROP_CORNER,CORNER_RIGHT_UPPER);
+      //--- set anchor type 
+      ObjectSetInteger(chart_ID,objName,OBJPROP_ANCHOR,ANCHOR_RIGHT_UPPER);       
+      //--- set the text 
+      ObjectSetString(chart_ID,objName,OBJPROP_TEXT,"This is the debug box");
+      //--- set font size 
+      ObjectSetInteger(chart_ID,objName,OBJPROP_FONTSIZE,8); 
+      //--- set color 
+      ObjectSetInteger(chart_ID,objName,OBJPROP_COLOR,clr);       
+      
+   }
+   
+   return true;
+}
+
+
+// ==================================
+//      Scrive il testo di debug 
+// ==================================
+bool setDebugText(string txt){
+   string objName = "debug Label";
+   int chart_ID = 0;
+      //--- set the text 
+      ObjectSetString(chart_ID,objName,OBJPROP_TEXT,txt);
+   return true;
+
+}
+
+
+
+
 
 
 // ==================================
@@ -731,8 +942,9 @@ int screenLog()
             "\n ",
   
             "\n +-----------------------------   ",
-            "\n BUY Conditions   : 0.",buyConditions[0]," 1.",buyConditions[1]," 2.",buyConditions[2]," 3.",buyConditions[3]," 4.",buyConditions[4],
-            "\n SELL Conditions  : 0.",sellConditions[0]," 1.",sellConditions[1]," 2.",sellConditions[2]," 3.",sellConditions[3]," 4.",sellConditions[4],
+            "\n Max Distance   : ",(string)entryDistance,
+            //"\n isFirstBreakout(BUY): ",(string)isFirstBreakout(OP_BUY),
+            //"\n isFirstBreakout(SELL): ",(string)isFirstBreakout(OP_SELL),
             "\n +-----------------------------   ",
             "\n Time: ",TimeCurrent(),
 
