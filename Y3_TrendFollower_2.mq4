@@ -3,14 +3,12 @@
 //|                        Copyright 2015, MetaQuotes Software Corp. |
 //|                                             https://www.mql5.com |
 //+------------------------------------------------------------------+
-#property copyright "Copyright 2015, Y3"
+#property copyright "Copyright 2016, Y3"
 #property link      "https://www.y3web.it"
-#property version   "1.00"
+#property version   "2.00"
 #property strict
-// ============== NOTE ======================
-// GBP USD (2015) sarStep 0.015 > performance belle stabili
-// GER30 Ago-Dic 2015 sarSpet 0.01 - partialCloseEnabled=true - trendFilter=3 [isUpTrend(3)] > miglior sfruttamento dei trend
-// EURUSD - ToDo
+// ============== NOTE ========================
+// la versione 2.0 utilizza l'ingresso di Maxx in trend
 
 
 string bot_name = "TrendFollower";
@@ -80,11 +78,9 @@ void OnTick()
          openOrder(OP_BUY, POWER);
    */
    
-   if(   (isUpTrend(3)) 
-      && (isMin()) 
-      && (maxIsBroken()) 
-      //&& (isEntryReached(OP_BUY))
-      //&& (!existOrder(OP_BUY))
+   if(   (isUpTrend()) 
+      && (isUpSignal()) 
+      && (!existOrder(OP_BUY))
       && (!existOpendedAndClosedOnThisBar(1))
       && (!existOrderOnThisBar(OP_BUY))
      )   
@@ -102,14 +98,14 @@ void OnTick()
       
       //clausole di chiusura
       if (   (stoppedBySAR(OP_BUY))                                     // se il SAR si gira, chiudo
-          //|| (isFridayNight())                                          // se è venerdì sera chiudo per evitare il gap del lunedì
-          
+          //|| (brokeLastBar(OP_BUY))                                     // se viola il minimo ella barra precedente
+          || (minGainReached(OrderTicket()))                             // se il profitto raggiunge l'1:1 chiudo
          )                      
         closeOrder(OrderTicket());
 
       // --- chiusura parziale ---
       if (minGainReached(OrderTicket())
-      && OrderStopLoss()<OrderOpenPrice()) //se ho messo lo stop in pari non dimezzo più la posizione
+      && (OrderStopLoss()<OrderOpenPrice()) ) //se ho messo lo stop in pari non dimezzo più la posizione
          partialClose(OrderTicket());
    }
 
@@ -137,11 +133,9 @@ void OnTick()
          openOrder(OP_SELL, POWER);
    */
    
-   if(   (isDownTrend(3)) 
-      && (isMax()) 
-      && (minIsBroken()) 
-      //&& (isEntryReached(OP_SELL))
-      //&& (!existOrder(OP_SELL))
+   if(   (isDownTrend()) 
+      && (isDownSignal()) 
+      && (!existOrder(OP_SELL))
       && (!existOpendedAndClosedOnThisBar(1))
       && (!existOrderOnThisBar(OP_SELL))
      )   
@@ -158,13 +152,14 @@ void OnTick()
       
       // --- clausole di chiusura ---
       if (   (stoppedBySAR(OP_SELL))                                    // se il SAR si gira, chiudo
-          //|| (isFridayNight())                                          // se è venerdì sera chiudo per evitare il gap del lunedì
+          //|| (brokeLastBar(OP_SELL))                                    // se viola il massimo ella barra precedente
+          || (minGainReached(OrderTicket()))                             // se il profitto raggiunge l'1:1 chiudo
          )
          closeOrder(OrderTicket());
 
       // --- chiusura parziale ---
       if (minGainReached(OrderTicket())
-      && OrderStopLoss()>OrderOpenPrice()) //se ho messo lo stop in pari non dimezzo più la posizione
+      && (OrderStopLoss()>OrderOpenPrice())) //se ho messo lo stop in pari non dimezzo più la posizione
          partialClose(OrderTicket());
    }
    
@@ -183,24 +178,13 @@ void OnTick()
 //-------------------------------------------------+
 //    Sono in un trend UP 
 //-------------------------------------------------+
-bool isUpTrend(int shift=3){
-   /*
-   double fastMA = iMA(nomIndice,PERIOD_CURRENT,fastMA_period,0,MODE_EMA,PRICE_MEDIAN,0);
-   double slowMA = iMA(nomIndice,PERIOD_CURRENT,slowMA_period,0,MODE_SMMA,PRICE_MEDIAN,0);
-   
-   if (fastMA > slowMA) return true;
-   else return false;
-   */
+bool isUpTrend(){
+
    double actualSAR = iSAR(nomIndice,PERIOD_CURRENT,sarStep,0.2,0);
    double oldSar_1 = iSAR(nomIndice,PERIOD_CURRENT,sarStep,0.2,1);
    double oldSar_2 = iSAR(nomIndice,PERIOD_CURRENT,sarStep,0.2,2);
    double oldSar_3 = iSAR(nomIndice,PERIOD_CURRENT,sarStep,0.2,3);
    double actualPrice = MarketInfo(nomIndice, MODE_BID);
-
-
-   // per tracciare il punto di ingresso buy
-   //double actualATR = iATR(nomIndice,PERIOD_CURRENT,7,0);
-   //double targetPrice = NormalizeDouble( (Low[1]+((High[1]-Low[1])/2)) -0.7*actualATR,Digits);
 
    
    if( (actualPrice > actualSAR) && (Close[1] > oldSar_1) && (Close[2] > oldSar_2) && (Close[3] > oldSar_3) ) 
@@ -214,23 +198,14 @@ bool isUpTrend(int shift=3){
 //-------------------------------------------------+
 //    Sono in un trend DOWN 
 //-------------------------------------------------+
-bool isDownTrend(int shift=3){
-   /*
-   double fastMA = iMA(nomIndice,PERIOD_CURRENT,fastMA_period,0,MODE_EMA,PRICE_MEDIAN,0);
-   double slowMA = iMA(nomIndice,PERIOD_CURRENT,slowMA_period,0,MODE_SMMA,PRICE_MEDIAN,0);
-   
-   if (fastMA < slowMA) return true;
-   else return false;
-   */
+bool isDownTrend(){
+
    double actualSAR = iSAR(nomIndice,PERIOD_CURRENT,sarStep,0.2,0);
    double oldSar_1 = iSAR(nomIndice,PERIOD_CURRENT,sarStep,0.2,1);
    double oldSar_2 = iSAR(nomIndice,PERIOD_CURRENT,sarStep,0.2,2);
    double oldSar_3 = iSAR(nomIndice,PERIOD_CURRENT,sarStep,0.2,3);
    double actualPrice = MarketInfo(nomIndice, MODE_BID);
 
-   // per tracciare il punto di ingresso buy
-   //double actualATR = iATR(nomIndice,PERIOD_CURRENT,7,0);
-   //double targetPrice = NormalizeDouble( (Low[1]+((High[1]-Low[1])/2)) +0.7*actualATR,Digits);
    
    if( (actualPrice < actualSAR) && (Close[1] < oldSar_1) && (Close[2] < oldSar_2) && (Close[3] < oldSar_3) ) 
       return true;
@@ -238,6 +213,59 @@ bool isDownTrend(int shift=3){
 }
 
 
+//----------------------------------------------------------------+
+//    Si verifica una barra di colore opposto e la si sfonda UP
+//----------------------------------------------------------------+
+bool isUpSignal(){
+   double atr = iATR(nomIndice,PERIOD_CURRENT,14,1);
+   string lastBarDirection = "up";
+   string prevBarDirection = "up";
+   double lastBarSize = MathAbs(High[1]-Low[1]);
+   //double prevBarSize = MathAbs(High[2]-Low[2]);
+   double actualPrice = MarketInfo(nomIndice, MODE_BID);
+   bool result = false;
+   
+   if( Open[1]>Close[1] ) lastBarDirection = "down";
+   if( Open[2]>Close[2] ) prevBarDirection = "down";
+
+   
+   if(   (lastBarDirection == "up") 
+         && (prevBarDirection == "down") 
+         && (actualPrice > High[1]) 
+         //&& (lastBarSize >= atr)
+     ) result = true;
+   // TODO: aggiungere qui sopra anche le condizioni sulla dimensione delle barre (vola)
+   
+   return result;
+   
+}
+
+
+//----------------------------------------------------------------+
+//    Si verifica una barra di colore opposto e la si sfonda DOWN
+//----------------------------------------------------------------+
+bool isDownSignal(){
+   double atr = iATR(nomIndice,PERIOD_CURRENT,14,1);
+   string lastBarDirection = "up";
+   string prevBarDirection = "up";
+   double lastBarSize = MathAbs(High[1]-Low[1]);
+   //double prevBarSize = MathAbs(High[2]-Low[2]);
+   double actualPrice = MarketInfo(nomIndice, MODE_BID);
+   bool result = false;
+   
+   if( Open[1]>Close[1] ) lastBarDirection = "down";
+   if( Open[2]>Close[2] ) prevBarDirection = "down";
+
+   
+   if(   (lastBarDirection == "down") 
+         && (prevBarDirection == "up") 
+         && (actualPrice < Low[1]) 
+         //&& (lastBarSize >= atr)
+     ) result = true;
+   // TODO: aggiungere qui sopra anche le condizioni sulla dimensione delle barre (vola)
+   return result;
+   
+}
 
 //-------------------------------------------------+
 //    Aggiungo un segno nel punto di ingresso 
@@ -260,6 +288,21 @@ bool drawNewEntryPoint(int ot, double targetPrice){
 }
 
 
+//-------------------------------------------------+
+//    Ho rotto il max precedente 
+//-------------------------------------------------+
+
+bool brokeLastBar(int ot){
+   double lastLow = Low[1];
+   double lastHigh = High[1];
+   double actualPrice = MarketInfo(nomIndice, MODE_BID);
+   bool result = false;
+
+   if((ot == OP_BUY) && (actualPrice < lastLow)) {result = true;}
+   if((ot == OP_SELL) && (actualPrice > lastHigh)) {result = true;}
+
+   return result;
+}
 
 //-------------------------------------------------+
 //    Ho rotto il max precedente 
@@ -466,7 +509,7 @@ bool isFridayNight(){
 //-----------------------------------------------------------------+
 bool minGainReached(int tkt){  
    if (!OrderSelect(tkt,SELECT_BY_TICKET,MODE_TRADES)) return false;
-   if(OrderLots()< POWER) return false; // se l'ordine è già stato ridotto, non lo riduco ulteriormente
+   //if(OrderLots()< POWER) return false; // se l'ordine è già stato ridotto, non lo riduco ulteriormente
    double price = MarketInfo(nomIndice,MODE_BID);
    double actualGain = price - OrderOpenPrice();
    if (OrderType()==OP_SELL) actualGain = (actualGain*-1); 
@@ -492,6 +535,8 @@ bool partialClose(int tkt){
    if(minLot == 0.001)  digits=3;
 
    double halfLots = NormalizeDouble( (OrderLots()/2), digits);
+   
+   Print("******************** chiusura parziale ordine "+tkt+" , da "+OrderLots()+" a "+halfLots+" lotti ********************");
    
    if(!OrderModify(tkt,OrderOpenPrice(),OrderOpenPrice(),OrderTakeProfit(),OrderExpiration())) {Print("Errore nella modifica dello SL ordine: "+(string)GetLastError()); return false;}
    // INFO : La chiusura a pareggio peggiora leggermente le performance. Non di molto, ma le peggiora.
@@ -541,27 +586,36 @@ double Martin(double sz){
    int total = OrdersTotal();
    double newSize = sz;
    bool alreadyOpened = false;
+   double maxLots = MarketInfo(nomIndice,MODE_MAXLOT);
+      
    // c'è già un ordine aperto con size > sz?   
    for(int pos=0;pos<total;pos++)
    {      
       if(OrderSelect(pos,SELECT_BY_POS)==false) continue;
       if ((OrderMagicNumber() == SIGNATURE) && (OrderSymbol() == nomIndice) && ((OrderType() == OP_SELL) || (OrderType() == OP_BUY)) && (OrderCloseTime() == 0) ){
-         if (OrderLots() > sz) return sz;
+         if (OrderLots() >= sz) return sz;
       }
    }
    
    // se arrivo qui, non ho un ordine martingalato. Conto le perdite 
    total = OrdersHistoryTotal();
+   int i = 0;
    for(int pos=total-20;pos<total;pos++)
-   {      
+   {  
+        
       if(OrderSelect(pos,SELECT_BY_POS,MODE_HISTORY)==false) continue;
       if ((OrderMagicNumber() == SIGNATURE) && (OrderSymbol() == nomIndice) && ((OrderType() == OP_SELL) || (OrderType() == OP_BUY)) && (OrderCloseTime() != 0) ){
-         Print("**************  Martin: ordine "+OrderTicket()+" -> "+OrderProfit()+" **************");
-         if (OrderProfit() > 0) {newSize = sz;}
-         else {//newSize = newSize+sz;
-               newSize = newSize*2;}
+         //Print("**************  Martin: ordine "+OrderTicket()+" -> "+OrderProfit()+" **************");
+         if (OrderProfit() > 0) {i=0; newSize = sz;}
+         else {   i++; 
+                  //newSize = newSize+sz; //falso martingale: somma sz ogni volta invece di moltiplicare
+                  if(i>0) {newSize = newSize*2;} //vero martingale. utilizzare valore di i per fare iniziare le moltiplicazioni solo da un certo numero di sconfitte in poi
+              }
       }
    }
+
+   if (newSize > maxLots) newSize = maxLots;
+   
    return newSize;
 }
 
