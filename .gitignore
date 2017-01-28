@@ -26,7 +26,8 @@ $RECYCLE.BIN/
 .LSOverride
 
 # Icon must ends with two \r.
-Icon
+Icon
+
 
 # Thumbnails
 ._*
@@ -37,3 +38,4 @@ Icon
 
 # Compiled EAs
 *.ex4
+/Y3_Yoyo_TF.mq4

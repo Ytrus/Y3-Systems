@@ -3,32 +3,36 @@
 //|                        Copyright 2015, MetaQuotes Software Corp. |
 //|                                             https://www.mql5.com |
 //+------------------------------------------------------------------+
-#property copyright "Copyright 2015, Y3"
+// ver 2.000 aggiunto controllo distanza minima tra ama e pallini
+#property copyright "Copyright 2016, Y3"
 #property link      "https://www.y3web.it"
 #property version   "1.00"
 #property strict
 // ============== NOTE ======================
-// GER30 M5 Default value
-// EURUSD - ToDo
+// GER30 M1 Default value
 
 
-string bot_name = "Y3_Yoyo";
+
+string bot_name = "Y3_Paolone";
 string nomIndice = "EURUSD"; //sovrascritto dopo in init()
 
-extern int SIGNATURE = 777333;
-extern string COMMENT = "Y3_Yoyo";
-extern double POWER = 0.1;
-extern bool partialCloseEnabled = true;
+extern int SIGNATURE = 373737;
+extern string COMMENT = "Y3_Paolone";
+extern double POWER = 1;
+extern int distancePeriod = 14;
+extern double distanceMultiplier = 0.9;
+extern double martinMultiplier = 1;
+extern int minDistance = 8;
+extern string openHours = "6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22";                            
+int protectionStartDistance = 100;
+int protectionCloseDistance = 0;
+
 int atrPeriod = 14;
 double atrMultiplier = 6.0;
 bool usePercentageRisk = false;
 int maPeriod = 100;
-extern int distancePeriod = 14;
-extern double distanceMultiplier = 1;
-extern int martinMultiplier = 2;
-int protectionStartDistance = 100;
-int protectionCloseDistance = 0;
-extern string openHours = "8,9,10,11,12,13,14,15,16,17";                            
+bool partialCloseEnabled = false;
+
 
 double atr = 0;
 double entryDistance = 0;
@@ -44,9 +48,11 @@ int OnInit()
   {
 //---
    nomIndice = Symbol();
-   setHours(); //imposto le ore in cui è consentito fare trading
-   createDebugLabel(); // inizializzo la finestra di debug
-   deleteOrderData(); // cancello il file csv con l'elenco degli ordini
+   setHours();             //imposto le ore in cui è consentito fare trading
+   createDebugLabel();     // inizializzo la finestra di debug
+   createMedianBuyPrice(); // crea la linea orizzontale usata per mostrare il prezzo medio di acquisto dei BUY 
+   createMedianSellPrice(); // crea la linea orizzontale usata per mostrare il prezzo medio di acquisto dei BUY 
+   deleteOrderData();      // cancello il file csv con l'elenco degli ordini
 //---
    return(INIT_SUCCEEDED);
   }
@@ -70,6 +76,7 @@ void OnTick()
       entryDistance = getDistance(distancePeriod);
       //aggiorno lastAnalizedBarTime in modo che fino alla prossima barra tutto questo non venga eseguito
       lastAnalizedBarTime = Time[0];
+      //setDebugText(MarketInfo(nomIndice,MODE_LOTSTEP));
       
    }
 
@@ -78,18 +85,25 @@ void OnTick()
    // ===============
 
    
-   if(   (isDownFromMA())
+   if(   (gridDistanceIsEnough(OP_BUY)) 
       && (!existOpendedAndClosedOnThisBar(1))
       && (!existOrderOnThisBar(OP_BUY)) 
+      && (isDownFromMA())
       //&& (!isFirstBreakout(OP_BUY)) 
       //&& (!existOrder(OP_BUY))
       //&& ((medianTargetIsLessThenZero(OP_BUY)) && (!isGoingTooFast(OP_BUY)))  --nel 2016 perde e basta. non ho provato altri anni.
       && (medianTargetIsLessThenZero(OP_BUY))
       && (enabledHours[Hour()])
+      && (entryDistance >= minDistance)
      )   {
         openOrder(OP_BUY, POWER);
      }
 
+
+   //chiusura complessiva di tutti i BUY
+   if (averageTargetReached(OP_BUY)) closeAllBuyOrders();
+
+/*
    for(int pos=0;pos<OrdersTotal();pos++)
    {
       if( (OrderSelect(pos,SELECT_BY_POS)==false)
@@ -110,7 +124,7 @@ void OnTick()
       //if (minGainReached(OrderTicket()))
       //   partialClose(OrderTicket());
    }
-
+*/
 
 
       
@@ -122,15 +136,23 @@ void OnTick()
    if(   (isUpFromMA())
       && (!existOpendedAndClosedOnThisBar(1))
       && (!existOrderOnThisBar(OP_SELL))
+      && (gridDistanceIsEnough(OP_SELL)) 
       //&& (!isFirstBreakout(OP_SELL)) 
       //&& (!existOrder(OP_SELL))
       //&& (medianTargetIsLessThenZero(OP_SELL) && (!isGoingTooFast(OP_SELL)))  //nel 2016 perde e basta. Non ho provato altri anni.
       && (medianTargetIsLessThenZero(OP_SELL))
       && (enabledHours[Hour()])
+      && (entryDistance >= minDistance)
      )   {
          openOrder(OP_SELL, POWER);
      }
 
+
+
+   //chiusura complessiva di tutti i SELL
+   if (averageTargetReached(OP_SELL)) closeAllSellOrders();
+
+/*
    for(int pos=0;pos<OrdersTotal();pos++)
    {
       if( (OrderSelect(pos,SELECT_BY_POS)==false)
@@ -151,7 +173,7 @@ void OnTick()
       //if (minGainReached(OrderTicket()))
       //   partialClose(OrderTicket());
    }
-   
+*/   
    
 
    
@@ -241,6 +263,17 @@ bool medianTargetIsLessThenZero(int ot){
    
    return result;    
    
+}
+
+// =============================================================
+//      La distanza tra pallino e AMA deve essere 
+//      maggiore o uguale al numero di pip indicati
+// =============================================================
+bool moreThanMinDistance(int d){
+   bool result = false;
+   if (entryDistance >= d) result=true;
+   setDebugText("entryDistance: "+string(entryDistance)+"/n d:"+string(d));
+   return result;
 }
 
 // =============================================================
@@ -422,7 +455,7 @@ bool existOpendedAndClosedOnThisBar(int limit)
 }   
 
 //-----------------------------------------------------------------+
-//       Eiste già un ordine aperto  in questa direzione
+//       Esiste già un ordine aperto  in questa direzione
 //-----------------------------------------------------------------+
 bool existOrder(int ot) 
 {
@@ -443,6 +476,93 @@ bool existOrder(int ot)
 }
 
 
+//----------------------------------------------------------------------------------+
+//       Verifica se ci sono altri ordini e, nel caso, la distanza dall'ultimo
+//----------------------------------------------------------------------------------+
+bool gridDistanceIsEnough(int ot)
+{
+   int total = OrdersTotal();
+   bool result = false;
+   int orders = 0;
+   double prz = MarketInfo(nomIndice,MODE_BID);
+   double lastOrderPrice = 0;
+   double actualDistance = 0;
+   int grid[15];
+   grid[0] = 0;      grid[1] = 40;     grid[2] = 80; 
+   grid[3] = 160;     grid[4] = 320;     grid[5] = 400; 
+   grid[6] = 400;     grid[7] = 400;     grid[8] = 400; 
+   grid[9] = 400;    grid[10] = 400;   grid[11] = 400; 
+   grid[12] = 400;   grid[13] = 400;   grid[14] = 400;
+   
+   for(int pos=0;pos<total;pos++) // dal più vecchio al più recente
+   {
+      
+      if(OrderSelect(pos,SELECT_BY_POS)==false) continue;
+      if ( (OrderMagicNumber() == SIGNATURE) && (OrderSymbol() == nomIndice) && (OrderType() == ot) && (OrderCloseTime() == 0) ){        
+         orders++;
+         lastOrderPrice = OrderOpenPrice();
+      }
+   }
+   
+   // la distanza del prezzo deve essere uguale a quella indicata in grid alla posizione uguale al numero di ordini presenti.
+   // se ho 0 ordini, la distanza è >= 0. Se ne ho 3 la distanza richiesta (per aprire il quarto) è => 40
+   actualDistance = NormalizeDouble(MathAbs(prz-lastOrderPrice),2);
+   if (actualDistance>=grid[orders]) result = true;
+   
+   // if (orders > 0) setDebugText("Ordini attivi: "+string(orders)+"\n Distanza attuale/richiesta: "+actualDistance+"/"+grid[orders]);
+   
+   
+   return result;
+
+}
+
+
+//------------------------------------------------------------------------+
+//    Se ho il minimo guadagno richiesto su tutte le posizioni aperte
+//------------------------------------------------------------------------+
+bool averageTargetReached(int ot){
+   bool result = false;  
+   int total = OrdersTotal();
+   if(total==0) return result; // se non ho ordini inutile cercare di chiuderli.
+   double lots = 0;
+   double opens = 0;
+   double medianOpen = 0;
+   double lastBestPrice = 0;
+   double actualPrice = MarketInfo(nomIndice, MODE_BID);
+   for(int pos=0;pos<total;pos++)
+   {
+      if(OrderSelect(pos,SELECT_BY_POS)==false) continue;
+      if ( (OrderMagicNumber() == SIGNATURE) && (OrderSymbol() == nomIndice) && (OrderType() == OP_BUY) && (OrderCloseTime() == 0) && (ot == OP_BUY) )
+         {
+            lots+=OrderLots(); opens+=OrderOpenPrice()*OrderLots();
+         }
+      if ((OrderMagicNumber() == SIGNATURE) && (OrderSymbol() == nomIndice) && (OrderType() == OP_SELL) && (OrderCloseTime() == 0) && (ot == OP_SELL) )
+         {
+            lots+=OrderLots(); opens+=OrderOpenPrice()*OrderLots();
+         }   }
+   
+   if(lots>0) {
+      medianOpen = NormalizeDouble(opens/lots,Digits);
+      
+      if(ot==OP_BUY){ 
+         setMedianBuyPrice(medianOpen);
+         if (actualPrice > medianOpen+10)  result = true;
+      }
+      if(ot==OP_SELL){
+         setMedianSellPrice(medianOpen);
+         if (actualPrice < medianOpen-10)  result = true;
+      }
+   }
+   
+   //SetDebugText("Average Price: "+string(medianOpen)+" - Distance: "+MathAbs(actualPrice-medianOpen));
+   
+   return result;    
+   
+}
+
+
+
+
 //--------------------------------------------------------+
 //                Apertura di un ordine 
 //--------------------------------------------------------+
@@ -460,7 +580,7 @@ bool openOrder(int ot, double sz){
                      }
 
    sz = getSize(POWER,MathAbs(prz-sl)/Point);
-   sz = martinOnOpen(sz);
+   sz = martinOnOpen(sz, ot);
    ticket = OrderSend(nomIndice,ot,sz,prz,2,sl,tp,COMMENT ,SIGNATURE,0,c);
    
 
@@ -513,23 +633,26 @@ double Martin(double sz){
 //--------------------------------------------------------+
 //             Martingalone sugli ordini aperti
 //--------------------------------------------------------+
-double martinOnOpen(double sz){
+double martinOnOpen(double sz, int ot){
    int total = OrdersTotal();
    double newSize = sz;
    double minLots = MarketInfo(nomIndice,MODE_MINLOT);
    double maxLots = MarketInfo(nomIndice,MODE_MAXLOT);
+   double lotStep = MarketInfo(nomIndice,MODE_MAXLOT);
    int x = 0;
       
    // c'è già un ordine aperto con size > sz?   
    for(int pos=0;pos<total;pos++)
    {      
       if(OrderSelect(pos,SELECT_BY_POS)==false) continue;
-      if ((OrderMagicNumber() == SIGNATURE) && (OrderSymbol() == nomIndice) && ((OrderType() == OP_SELL) || (OrderType() == OP_BUY)) && (OrderCloseTime() == 0) ){
+      if ((OrderMagicNumber() == SIGNATURE) && (OrderSymbol() == nomIndice) && (OrderType() == ot) && (OrderCloseTime() == 0) ){
          {newSize = newSize*martinMultiplier; x++;}
       }
    }
    
    //if (x==0) newSize = minLots; // se non ho ordini, il primo lo apro al minimo. Perchè dal secondo guadagna di più.
+   // normalizzo i lotti
+   if(MarketInfo(nomIndice,MODE_LOTSTEP) == 1) newSize = NormalizeDouble(newSize,0);
    if (newSize > maxLots) newSize = maxLots;
    
    return newSize;
@@ -605,7 +728,10 @@ bool closeAllSellOrders(){
          pos--;
       }
    }
-   
+
+   // nascondo la media degli ordini
+   setMedianSellPrice(0); 
+
    return result;       
    
 }
@@ -628,6 +754,9 @@ bool closeAllBuyOrders(){
          
       }
    }
+   
+   // nascondo la media degli ordini
+   setMedianBuyPrice(0); 
    
    return result;       
    
@@ -881,6 +1010,73 @@ bool setHours(){
    
    return true;
 }
+
+
+// ==================================
+//      Median BUY Price Line 
+// ==================================
+bool createMedianBuyPrice(){
+   string objName = "Median_Buy_Price";
+   int chart_ID = 0;
+   color clr = clrDodgerBlue;
+   
+   if(ObjectFind(0,objName) < 0) 
+   {
+      ObjectCreate(chart_ID,objName,OBJ_HLINE,0,0,0);
+      ObjectSetInteger(chart_ID,objName,OBJPROP_STYLE,STYLE_DASH); 
+      ObjectSetInteger(chart_ID,objName,OBJPROP_WIDTH,1); 
+      ObjectSetInteger(chart_ID,objName,OBJPROP_COLOR,clr); 
+   }
+   
+   return true;
+}
+// ==================================
+//      Sposta il Median Buy Price
+// ==================================
+bool setMedianBuyPrice(double price){
+   string objName = "Median_Buy_Price";
+   int chart_ID = 0;
+      //--- move the line
+   if(!ObjectMove(chart_ID,objName,0,0,price)) Print("++++ setMedianBuyPrice: fallito spostamento media prezzi buy +++++++++");
+      
+   return true;
+
+}
+
+// ==================================
+//      Median SELL Price Line 
+// ==================================
+bool createMedianSellPrice(){
+   string objName = "Median_Sell_Price";
+   int chart_ID = 0;
+   color clr =  clrCrimson;
+   
+   if(ObjectFind(0,objName) < 0) 
+   {
+      ObjectCreate(chart_ID,objName,OBJ_HLINE,0,0,0);
+      ObjectSetInteger(chart_ID,objName,OBJPROP_STYLE,STYLE_DASH); 
+      ObjectSetInteger(chart_ID,objName,OBJPROP_WIDTH,1); 
+      ObjectSetInteger(chart_ID,objName,OBJPROP_COLOR,clr); 
+   }
+   
+   return true;
+}
+// ==================================
+//      Sposta il Median SELL Price
+// ==================================
+bool setMedianSellPrice(double price){
+   string objName = "Median_Sell_Price";
+   int chart_ID = 0;
+      //--- move the line
+   if(!ObjectMove(chart_ID,objName,0,0,price)) Print("++++ setMedianSellPrice: fallito spostamento media prezzi sell +++++++++");
+      
+   return true;
+
+}
+
+
+
+
 
 
 

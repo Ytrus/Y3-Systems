@@ -3,6 +3,7 @@
 //|                        Copyright 2015, MetaQuotes Software Corp. |
 //|                                             https://www.mql5.com |
 //+------------------------------------------------------------------+
+// ver 2.000 aggiunto controllo distanza minima tra ama e pallini
 #property copyright "Copyright 2015, Y3"
 #property link      "https://www.y3web.it"
 #property version   "1.00"
@@ -24,11 +25,13 @@ double atrMultiplier = 6.0;
 bool usePercentageRisk = false;
 int maPeriod = 100;
 extern int distancePeriod = 14;
-extern double distanceMultiplier = 1;
-extern int martinMultiplier = 2;
+extern double distanceMultiplier = 0.9;
+extern int martinMultiplier = 1;
+extern int minDistance = 8;
+extern string openHours = "8,9,10,11,12,13,14,15,16,17";                            
 int protectionStartDistance = 100;
 int protectionCloseDistance = 0;
-extern string openHours = "8,9,10,11,12,13,14,15,16,17";                            
+
 
 double atr = 0;
 double entryDistance = 0;
@@ -86,6 +89,7 @@ void OnTick()
       //&& ((medianTargetIsLessThenZero(OP_BUY)) && (!isGoingTooFast(OP_BUY)))  --nel 2016 perde e basta. non ho provato altri anni.
       && (medianTargetIsLessThenZero(OP_BUY))
       && (enabledHours[Hour()])
+      && (moreThanMinDistance(minDistance))
      )   {
         openOrder(OP_BUY, POWER);
      }
@@ -127,6 +131,7 @@ void OnTick()
       //&& (medianTargetIsLessThenZero(OP_SELL) && (!isGoingTooFast(OP_SELL)))  //nel 2016 perde e basta. Non ho provato altri anni.
       && (medianTargetIsLessThenZero(OP_SELL))
       && (enabledHours[Hour()])
+      && (moreThanMinDistance(minDistance))
      )   {
          openOrder(OP_SELL, POWER);
      }
@@ -241,6 +246,17 @@ bool medianTargetIsLessThenZero(int ot){
    
    return result;    
    
+}
+
+// =============================================================
+//      La distanza tra pallino e AMA deve essere 
+//      maggiore o uguale al numero di pip indicati
+// =============================================================
+bool moreThanMinDistance(int d){
+   bool result = false;
+   if (entryDistance >= d) result=true;
+   setDebugText("entryDistance: "+entryDistance+"/n d:"+d);
+   return result;
 }
 
 // =============================================================
